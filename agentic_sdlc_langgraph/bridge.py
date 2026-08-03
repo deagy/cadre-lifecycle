@@ -111,8 +111,9 @@ def parse_input(raw: str) -> tuple[DispatchRequest, list[str]]:
         errors.append("'task' is required and must be a string")
         task = ""
 
-    # Handle camelCase aliases
-    files_raw = data.get("files", data.get("files"))
+    # "files" has no separate camelCase form (unlike taskId/requireSdlc/root
+    # below) — it's already the same spelling either way.
+    files_raw = data.get("files")
     if files_raw is None:
         files = []
     elif isinstance(files_raw, str):
