@@ -30,7 +30,7 @@ cd cline && npm run typecheck
 For the LangGraph engine:
 
 ```sh
-cd agentic_sdlc_langgraph && uv sync && uv run pytest
+cd agentic_sdlc_langgraph && python3 -m unittest test_bridge -v
 ```
 
 ## Coding Style & Naming Conventions
@@ -56,7 +56,7 @@ Never commit secrets, raw chat exports, real documents, local environment files,
 
 ## Agentic SDLC Boundary
 
-The Agentic SDLC kernel owns lifecycle gate schemas, run-record validation, and gate-authority semantics. It is consumed here as a vendored dependency.
+The Agentic SDLC kernel owns lifecycle gate schemas, run-record validation, and gate-authority semantics. It is consumed here as an external dependency (the separately installed `agentic-sdlc` CLI from `deagy/agentic-sdlc`, invoked via `bin/cadre sdlc`), not vendored.
 
 Do not copy lifecycle schemas, run-record validators, gate authorities, or kernel authority into the Cadre register. Never infer gate approval, production/destructive authority, risk acceptance, or compliance applicability for another project.
 

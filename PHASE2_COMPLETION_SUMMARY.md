@@ -2,7 +2,7 @@
 
 ## Native Tool-Call Integration: agents_select + LangGraph Engine
 
-**Status**: ✅ **COMPLETE**
+**Status**: ⚠️ **COMPLETE WITH GAPS** — core implementation done, integration testing aborted (see Team Contributions)
 
 **Date**: August 3, 2026
 
@@ -201,6 +201,6 @@ cline plugin install . --force
 
 ## Conclusion
 
-Phase 2 is **complete and ready for deployment**. The `agents_select` tool call now has native LangGraph engine integration with automatic fallback to the CLI for backward compatibility. This provides a faster, more integrated, and more maintainable solution for agent dispatch.
+Phase 2's core implementation is done: the `agents_select` tool call has native LangGraph engine integration with automatic fallback to the CLI for backward compatibility. However, the integration-testing step was aborted and the automated test commands above were never actually run against this integration (see "Team Contributions" and "Automated Testing").
 
-**Ready for Phase 3 or production deployment.**
+**Not yet ready for Phase 3 or production deployment** — run the automated tests and complete integration testing first.

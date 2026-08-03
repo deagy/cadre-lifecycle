@@ -62,6 +62,11 @@ class DispatchRequest:
     task_id: Optional[str] = None
     classification: Optional[str] = None
     require_sdlc: bool = False
+    root: Optional[str] = None
+    """Target repository root. Defaults to this plugin's own root (PLUGIN_ROOT)
+    when omitted, mirroring the CLI's `--root` (which defaults to the
+    caller's cwd) — omission is only correct for callers that mean "this
+    repository," not a stand-in for "unknown."""
 
     def validate(self) -> list[str]:
         """Return a list of validation errors (empty if valid)."""
@@ -69,7 +74,7 @@ class DispatchRequest:
         if not self.task or not self.task.strip():
             errors.append("'task' is required and must be non-empty")
         if self.base and self.files:
-            errors.append("'base' cannot be combined with 'files'")
+            errors.append("--base cannot be combined with --files")
         valid_classifications = {"public", "internal", "confidential", "restricted"}
         if self.classification and self.classification not in valid_classifications:
             errors.append(
@@ -183,6 +188,17 @@ class NativeDispatchAdapter(DispatchAdapter):
 
             from build_dispatch_plan import build_dispatch_plan  # noqa: E402
 
+            repository_root = (
+                Path(request.root).expanduser().resolve() if request.root else PLUGIN_ROOT
+            )
+            if not repository_root.is_dir():
+                return DispatchResponse(
+                    success=False,
+                    error=f"Repository root is not a directory: {repository_root}",
+                    error_code="INVALID_ROOT",
+                    method="native",
+                )
+
             # Build the input_data dict expected by build_dispatch_plan
             if request.files:
                 changed_files = [f.replace("\\", "/") for f in request.files]
@@ -190,18 +206,18 @@ class NativeDispatchAdapter(DispatchAdapter):
             else:
                 # Try to discover changed files via git
                 changed_files, changed_file_source = self._discover_changed_files(
-                    request.base
+                    request.base, repository_root
                 )
 
             input_data = {
                 "task": request.task,
                 "task_id": request.task_id,
-                "repository_root": str(PLUGIN_ROOT),
+                "repository_root": str(repository_root),
                 "base": request.base,
                 "changed_files": changed_files,
                 "changed_file_source": changed_file_source,
                 "classification": request.classification,
-                "source": self._resolve_knowledge_source(),
+                "source": self._resolve_knowledge_source(repository_root),
                 "top": "5",
             }
 
@@ -228,64 +244,96 @@ class NativeDispatchAdapter(DispatchAdapter):
                 method="native",
             )
 
-    def _discover_changed_files(
-        self, base: Optional[str]
-    ) -> tuple[list[str], str]:
-        """Discover changed files via git, or return empty list."""
-        if not base:
-            return [], "none"
-
+    def _run_git(self, args: list[str], repository_root: Path) -> str:
+        # repository_root is caller-controlled (an arbitrary target workspace)
+        # and may point at an untrusted checkout; neutralize the
+        # config-driven RCE surface (fsmonitor hook, system-wide config,
+        # interactive credential prompts) before reading its .git state.
+        # Mirrors select_agents.py's _run_git, plus a 10s timeout: this
+        # runtime is invoked in-process from a long-lived bridge/plugin
+        # session rather than as a one-shot CLI process, so an unbounded git
+        # call here would hang the whole session rather than just exiting.
         env = dict(os.environ)
         env["GIT_CONFIG_NOSYSTEM"] = "1"
         env["GIT_TERMINAL_PROMPT"] = "0"
+        result = subprocess.run(
+            ["git", "-c", "core.fsmonitor=false", "--no-optional-locks", *args],
+            cwd=str(repository_root),
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or f"git {' '.join(args)} failed")
+        return result.stdout
 
-        try:
-            result = subprocess.run(
-                [
-                    "git",
-                    "-c",
-                    "core.fsmonitor=false",
-                    "--no-optional-locks",
-                    "diff",
-                    "--name-only",
-                    f"{base}...HEAD",
-                ],
-                cwd=str(PLUGIN_ROOT),
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                timeout=10,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                files = [
-                    f.replace("\\", "/")
-                    for f in result.stdout.strip().splitlines()
-                    if f.strip()
-                ]
-                return files, "git-diff"
-        except (subprocess.TimeoutExpired, OSError) as error:
-            logger.debug("Git diff failed: %s", error)
+    def _discover_changed_files(
+        self, base: Optional[str], repository_root: Path
+    ) -> tuple[list[str], str]:
+        """Discover changed files via git.
 
-        return [], "git-diff-failed"
+        Mirrors select_agents.py's discover_changed_files exactly: with a
+        base ref, a diff against it; without one, the dirty working tree
+        (not "no files") via `git status`. Git failures propagate as a
+        RuntimeError rather than degrading to an empty/incomplete plan —
+        the caller (execute()) already catches this and reports it as an
+        adapter failure, which DispatchEngine then falls back to the CLI
+        adapter for, rather than silently returning a plan built on an
+        incomplete change set.
+        """
+        if base:
+            files = [
+                line
+                for line in self._run_git(
+                    ["diff", "--name-only", f"{base}...HEAD"], repository_root
+                ).splitlines()
+                if line
+            ]
+            return [f.replace("\\", "/") for f in files], f"git-diff:{base}...HEAD"
 
-    def _resolve_knowledge_source(self) -> str:
+        # -z gives NUL-separated, never-quoted paths; git's default --short
+        # quotes paths containing non-ASCII/special characters
+        # (core.quotePath), which plain line[3:] parsing would leave
+        # mangled. Renamed/copied entries add one extra NUL-separated
+        # original-path field we don't need and must skip.
+        raw = self._run_git(
+            ["status", "--short", "-z", "--untracked-files=all"], repository_root
+        )
+        fields = raw.split("\0")
+        files = []
+        index = 0
+        while index < len(fields):
+            entry = fields[index]
+            index += 1
+            if not entry:
+                continue
+            status, path = entry[:2], entry[3:]
+            files.append(path.replace("\\", "/"))
+            if "R" in status or "C" in status:
+                index += 1
+        return files, "git-status"
+
+    def _resolve_knowledge_source(self, repository_root: Path) -> str:
         """Resolve a knowledge-store source identifier."""
         import hashlib as _hashlib  # noqa: F811
+        import re as _re  # noqa: F811
 
-        slug = self._origin_slug()
+        slug = self._origin_slug(repository_root)
         if slug:
             return slug
         digest = _hashlib.sha256(
-            str(PLUGIN_ROOT.resolve()).encode("utf-8")
+            str(repository_root.resolve()).encode("utf-8")
         ).hexdigest()[:12]
         basename = (
-            _hashlib.sha256(b"local")
-            .hexdigest()[:4]
-        )  # placeholder
-        return f"local-cadre-{digest}"
+            _re.sub(r"[^a-z0-9._-]+", "-", repository_root.name.lower()).strip("-")
+            or "repository"
+        )
+        return f"local-{basename}-{digest}"
 
-    def _origin_slug(self) -> str | None:
+    def _origin_slug(self, repository_root: Path) -> str | None:
         """Extract owner/repo slug from git remote origin."""
         import re as _re  # noqa: F811
         from urllib.parse import urlparse as _urlparse  # noqa: F811
@@ -297,7 +345,7 @@ class NativeDispatchAdapter(DispatchAdapter):
         try:
             result = subprocess.run(
                 ["git", "-c", "core.fsmonitor=false", "remote", "get-url", "origin"],
-                cwd=str(PLUGIN_ROOT),
+                cwd=str(repository_root),
                 check=False,
                 capture_output=True,
                 text=True,
@@ -367,6 +415,9 @@ class FallbackDispatchAdapter(DispatchAdapter):
 
         try:
             args = [cadre_bin, "select", "--task", request.task]
+
+            if request.root:
+                args.extend(["--root", request.root])
 
             if request.files:
                 for f in request.files:
