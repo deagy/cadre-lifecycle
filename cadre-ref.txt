@@ -1,0 +1,10 @@
+# The deagy/cadre revision this repository's generated content corresponds to.
+#
+# Everything under skills/, agents/, codex-agents/, suite/, agent-catalog.json
+# and bin/ is produced by that revision's `bin/cadre generate-plugin`.
+# .github/workflows/validate.yml regenerates against exactly this ref and fails
+# on any difference, so the two repositories can never drift silently.
+#
+# To pick up register changes: update this ref and commit the regenerated diff
+# in the same pull request.
+2dd6f6b971f1cf4f1003cf610348caa486ce5fd9

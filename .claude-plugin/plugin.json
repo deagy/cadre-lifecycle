@@ -1,0 +1,14 @@
+{
+  "name": "cadre-lifecycle",
+  "displayName": "Cadre Lifecycle",
+  "version": "0.1.0",
+  "description": "Combined secure cloud agent suite (71 specialist roles) and Agentic SDLC lifecycle governance (G1–G10 gates), reachable from any project once installed at global scope.",
+  "author": {
+    "name": "Cadre maintainers",
+    "url": "https://github.com/deagy/cadre-lifecycle"
+  },
+  "homepage": "https://github.com/deagy/cadre-lifecycle",
+  "repository": "https://github.com/deagy/cadre-lifecycle",
+  "keywords": ["cadre", "lifecycle-governance", "orchestration", "agentic-sdlc", "system-wide", "knowledge-store"],
+  "skills": "./skills/"
+}

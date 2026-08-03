@@ -1,0 +1,12 @@
+{
+  "name": "cadre-lifecycle-team",
+  "owner": {
+    "name": "Cadre maintainers"
+  },
+  "plugins": [
+    {
+      "name": "cadre-lifecycle",
+      "source": "./"
+    }
+  ]
+}
