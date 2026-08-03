@@ -333,13 +333,30 @@ describe("cadre plugin", () => {
         "import signal, time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\ntime.sleep(60)\n",
       );
 
-      // If SIGKILL escalation didn't work, 'close' would never fire and
-      // this await would hang until vitest's own test timeout (a slow,
-      // non-diagnostic failure) rather than a clean rejection — bounding
-      // via a short timeoutMs/killGraceMs makes this a fast, precise check.
+      // timeoutMs is generous enough (300ms) that the interpreter has
+      // reliably finished installing the SIGTERM-ignore handler before the
+      // timer fires — with a very short timeoutMs (e.g. 100ms) there's a
+      // real race where the child could still die from the *plain* SIGTERM
+      // if the ignore handler hadn't been installed yet, which would make
+      // this pass without ever exercising the SIGKILL escalation it claims
+      // to test. Asserting the elapsed time is >= timeoutMs + killGraceMs
+      // (not just that it eventually rejects with a "timed out" message)
+      // is what actually distinguishes "SIGKILL fired" from "plain SIGTERM
+      // happened to work" — the latter would resolve close to timeoutMs
+      // alone, never waiting out the full grace period. The upper bound
+      // guards against this becoming a slow, non-diagnostic hang instead
+      // of a clean rejection if escalation ever stopped working.
+      const timeoutMs = 300;
+      const killGraceMs = 200;
+      const startedAt = Date.now();
+
       await expect(
-        runPythonBridge("{}", scriptDir, { scriptPath: hangingScript, timeoutMs: 100, killGraceMs: 100 }),
+        runPythonBridge("{}", scriptDir, { scriptPath: hangingScript, timeoutMs, killGraceMs }),
       ).rejects.toThrow(/timed out/i);
+
+      const elapsedMs = Date.now() - startedAt;
+      expect(elapsedMs).toBeGreaterThanOrEqual(timeoutMs + killGraceMs - 20); // small timer-granularity tolerance
+      expect(elapsedMs).toBeLessThan(timeoutMs + killGraceMs + 2_000); // generous ceiling against a true hang
     });
 
     it("rejects and kills the child when output exceeds the buffer limit", async () => {
@@ -349,9 +366,37 @@ describe("cadre plugin", () => {
         "import sys\nwhile True:\n    sys.stdout.write('x' * 1000)\n    sys.stdout.flush()\n",
       );
 
+      // timeoutMs here is this test's own internal fallback, not the thing
+      // under test (the overflow guard should reject long before it), but
+      // it must sit comfortably below vitest's own default per-test
+      // timeout (5000ms, unconfigured in this repo) or a slower-than-
+      // expected overflow detection would hit that opaque outer timeout
+      // instead of this precise rejection assertion.
       await expect(
-        runPythonBridge("{}", scriptDir, { scriptPath: verboseScript, maxBuffer: 100, timeoutMs: 5_000 }),
+        runPythonBridge("{}", scriptDir, { scriptPath: verboseScript, maxBuffer: 100, timeoutMs: 2_000 }),
       ).rejects.toThrow(/exceeded max buffer size/i);
+    });
+
+    it("does not crash on an EPIPE-style stdin write after the child has already closed its read end", async () => {
+      // Regression test for the original bug: an unguarded 'error' event on
+      // child.stdin (e.g. EPIPE from writing after the child closed fd 0)
+      // is an uncaught exception in Node and can crash the whole host
+      // process. Reliably forcing that exact race from outside
+      // runPythonBridge isn't possible without instrumenting it further
+      // (the write happens synchronously right after spawn(), before the
+      // child has necessarily even started) — this is a best-effort trigger
+      // (a large payload against a script that closes its stdin fd
+      // immediately) rather than a guaranteed reproduction. Its value is
+      // structural: if the `child.stdin.on("error", ...)` guard were ever
+      // removed, a triggered race here would crash this test file's whole
+      // process instead of failing this one assertion.
+      const closesStdinScript = path.join(scriptDir, "close_stdin_immediately.py");
+      writeFileSync(closesStdinScript, "import os\nos.close(0)\n");
+      const largePayload = "x".repeat(256 * 1024); // past typical OS pipe buffer sizes
+
+      await expect(
+        runPythonBridge(largePayload, scriptDir, { scriptPath: closesStdinScript, timeoutMs: 2_000 }),
+      ).resolves.toBeDefined();
     });
   });
 });

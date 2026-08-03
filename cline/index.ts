@@ -248,6 +248,7 @@ export function runPythonBridge(
     let timedOut = false;
 
     let killTimer: NodeJS.Timeout | undefined;
+    let terminating = false;
 
     // Send SIGTERM, then escalate to SIGKILL if the child ignores it (e.g.
     // blocked in an uninterruptible syscall) rather than leaving it to
@@ -256,8 +257,16 @@ export function runPythonBridge(
     // killTimer is cleared on 'close'/'error' if the child exits before it
     // fires — otherwise it would outlive a clean exit and could, in the
     // unlikely event the OS reuses the PID within the window, signal an
-    // unrelated process.
+    // unrelated process. Guarded against double-invocation: if the
+    // overflow guard and the overall timeout both fire for the same child
+    // (e.g. overflow trips just before the timer would have anyway), a
+    // second call would silently overwrite `killTimer`'s reference to the
+    // first scheduled SIGKILL, making that first timer unreachable for the
+    // close/error cleanup below — the same "outlive a clean exit" risk this
+    // cleanup exists to prevent, just reached a different way.
     function terminateWithEscalation(): void {
+      if (terminating) return;
+      terminating = true;
       child.kill("SIGTERM");
       killTimer = setTimeout(() => child.kill("SIGKILL"), killGraceMs);
     }
