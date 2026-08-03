@@ -213,13 +213,34 @@ const BRIDGE_TIMEOUT_MS = 60_000;
  * caller can parse that JSON envelope either way; only a spawn failure,
  * timeout, or buffer overflow (none of which produce a JSON envelope)
  * reject.
+ *
+ * `scriptPath`/`timeoutMs`/`maxBuffer`/`killGraceMs` default to the real
+ * bridge and production limits; overridable only so tests can exercise the
+ * timeout/SIGKILL-escalation and buffer-overflow branches deterministically
+ * and quickly (a throwaway hung/verbose script, millisecond-scale timeouts)
+ * without waiting on the real 60s/10MB production limits. Not part of the
+ * tool's own input surface — `execute()` never passes anything but the
+ * defaults.
  */
-function runPythonBridge(
+export function runPythonBridge(
   input: string,
   cwd: string,
+  options: {
+    scriptPath?: string;
+    timeoutMs?: number;
+    maxBuffer?: number;
+    killGraceMs?: number;
+  } = {},
 ): Promise<{ stdout: string; stderr: string }> {
+  const {
+    scriptPath = PYTHON_BRIDGE,
+    timeoutMs = BRIDGE_TIMEOUT_MS,
+    maxBuffer = BRIDGE_MAX_BUFFER,
+    killGraceMs = 5_000,
+  } = options;
+
   return new Promise((resolve, reject) => {
-    const child = spawn("python3", [PYTHON_BRIDGE], { cwd });
+    const child = spawn("python3", [scriptPath], { cwd });
 
     let stdout = "";
     let stderr = "";
@@ -238,13 +259,13 @@ function runPythonBridge(
     // unrelated process.
     function terminateWithEscalation(): void {
       child.kill("SIGTERM");
-      killTimer = setTimeout(() => child.kill("SIGKILL"), 5_000);
+      killTimer = setTimeout(() => child.kill("SIGKILL"), killGraceMs);
     }
 
     const timer = setTimeout(() => {
       timedOut = true;
       terminateWithEscalation();
-    }, BRIDGE_TIMEOUT_MS);
+    }, timeoutMs);
 
     child.stdout.setEncoding("utf-8");
     child.stderr.setEncoding("utf-8");
@@ -260,7 +281,7 @@ function runPythonBridge(
     child.stdout.on("data", (chunk: string) => {
       if (overflowed) return;
       stdout += chunk;
-      if (stdout.length > BRIDGE_MAX_BUFFER) {
+      if (stdout.length > maxBuffer) {
         overflowed = true;
         terminateWithEscalation();
       }

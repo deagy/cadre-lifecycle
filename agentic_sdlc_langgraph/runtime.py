@@ -655,6 +655,7 @@ def build_graph_for_task(
     task_id: str | None = None,
     classification: str | None = None,
     require_sdlc: bool = False,
+    root: str | None = None,
 ) -> dict[str, Any]:
     """Build a LangGraph-style dispatch graph for the given task.
 
@@ -668,6 +669,11 @@ def build_graph_for_task(
         task_id: Stable caller-supplied task identifier (optional).
         classification: Authorized knowledge classification (optional).
         require_sdlc: Fail instead of degrading if Agentic SDLC isn't available.
+        root: Target repository root (optional). Defaults to this plugin's
+            own root (PLUGIN_ROOT) when omitted — see DispatchRequest.root.
+            A caller acting on a different workspace must pass this
+            explicitly; bridge.py (the actual Cline-plugin-facing entry
+            point) always does, via NativeDispatchAdapter.
 
     Returns:
         A dictionary representing the dispatch graph, or an error dict if
@@ -683,6 +689,7 @@ def build_graph_for_task(
         task_id=task_id,
         classification=classification,
         require_sdlc=require_sdlc,
+        root=root,
     )
 
     errors = request.validate()
@@ -705,6 +712,7 @@ def execute_dispatch(
     task_id: str | None = None,
     classification: str | None = None,
     require_sdlc: bool = False,
+    root: str | None = None,
 ) -> dict[str, Any]:
     """Execute dispatch and return the raw plan (alias for build_graph_for_task).
 
@@ -717,4 +725,5 @@ def execute_dispatch(
         task_id=task_id,
         classification=classification,
         require_sdlc=require_sdlc,
+        root=root,
     )

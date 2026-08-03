@@ -31,7 +31,7 @@ Exit codes:
     0: Success (dispatch completed, even if plan has no agents)
     1: Error (invalid input, dispatch failure, or internal error)
 
-Example usage from Node.js:
+Example usage from Node.js (synchronous):
     const { execFileSync } = require('child_process');
     const input = JSON.stringify({ task: 'Implement user authentication' });
     const result = execFileSync('python3', ['bridge.py'], {
@@ -40,6 +40,16 @@ Example usage from Node.js:
         timeout: 30000
     });
     const plan = JSON.parse(result);
+
+    Caution for asynchronous callers: this `input` option only exists on
+    the synchronous execFile*Sync API shown above. child_process.execFile's
+    asynchronous API (including its promisify()-wrapped form) silently
+    ignores an `input` field in its options object — nothing gets written
+    to the child's stdin, so a process reading from stdin as this one does
+    blocks until whatever timeout you set kills it. Asynchronous callers
+    must use `child_process.spawn` and write to `child.stdin` explicitly
+    instead; see this repository's own cline/index.ts `runPythonBridge` for
+    a complete example.
 
 Example usage from shell:
     echo '{"task": "Implement user authentication"}' | python3 bridge.py
@@ -63,7 +73,6 @@ from runtime import (
     DispatchRequest,
     DispatchResponse,
     DispatchEngine,
-    build_graph_for_task,
 )
 
 logger = logging.getLogger("cadre-langgraph-bridge")
@@ -72,15 +81,7 @@ logger = logging.getLogger("cadre-langgraph-bridge")
 # Constants
 # ---------------------------------------------------------------------------
 
-REQUIRED_FIELDS = {"task"}
 MAX_INPUT_BYTES = 1 * 1024 * 1024  # 1 MB
-DEFAULT_TIMEOUT_SECONDS = 60
-
-# Field name mapping: CLI-style (snake_case) -> bridge-style (camelCase)
-FIELD_ALIASES = {
-    "taskId": "task_id",
-    "requireSdlc": "require_sdlc",
-}
 
 # ---------------------------------------------------------------------------
 # Input parsing

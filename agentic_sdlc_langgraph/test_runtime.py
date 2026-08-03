@@ -30,6 +30,7 @@ from runtime import (
     DispatchResponse,
     NativeDispatchAdapter,
     PLUGIN_ROOT,
+    build_graph_for_task,
 )
 
 
@@ -66,6 +67,37 @@ class TestNativeDispatchAdapterRoot(unittest.TestCase):
         response = adapter.execute(request)
         self.assertFalse(response.success)
         self.assertEqual(response.error_code, "INVALID_ROOT")
+
+
+class TestBuildGraphForTaskRoot(unittest.TestCase):
+    """`build_graph_for_task`/`execute_dispatch` are module-level convenience
+    wrappers around DispatchEngine whose own docstring calls them "the
+    primary public API" mirroring the CLI's inputs. Review found `root` had
+    been threaded through DispatchRequest and the adapters but not into
+    these wrapper functions' own parameter lists at all — passing root= used
+    to be a TypeError, silently defaulting every caller of them to
+    PLUGIN_ROOT regardless of intent. The graph shape these wrappers return
+    (_plan_to_graph) doesn't surface repository_root directly, so these
+    tests confirm root reaches dispatch by its effect (accepted without
+    TypeError; a nonexistent root produces an error result) rather than by
+    reading it back out of the graph.
+
+    Note: the graph representation itself is dead weight from the shipped
+    Cline plugin's perspective — bridge.py calls DispatchEngine.dispatch()
+    directly, never these wrappers or their LangGraph-node/edge shape."""
+
+    def test_accepts_root_kwarg_without_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            _init_git_repo(root)
+            graph = build_graph_for_task(task="t", files=["README.md"], root=str(root))
+            self.assertNotEqual(graph.get("status"), "error", graph.get("error"))
+
+    def test_nonexistent_root_surfaces_as_error(self):
+        graph = build_graph_for_task(
+            task="t", files=["README.md"], root="/nonexistent/definitely-not-a-directory"
+        )
+        self.assertEqual(graph.get("status"), "error")
 
 
 class TestNativeDispatchAdapterChangedFileDiscovery(unittest.TestCase):
@@ -212,7 +244,32 @@ class TestDispatchEngineFallback(unittest.TestCase):
 
         response = engine.dispatch(DispatchRequest(task="t"))
 
+        # The engine returns the fallback adapter's own response verbatim
+        # here (dispatch() has no separate "both failed" branch when the
+        # fallback is available and ran) — assert the exact response, not
+        # just success/failure, so a regression that started synthesizing a
+        # different error/method here wouldn't slip through.
         self.assertFalse(response.success)
+        self.assertEqual(response.error, "cli broke")
+        self.assertEqual(response.method, "fallback_cli")
+
+    def test_reports_no_adapter_available_when_neither_is_available(self):
+        # Distinct from "both executed and failed" above: this is dispatch()'s
+        # third branch, where is_available() is False for both adapters from
+        # the start, so neither execute() ever runs.
+        native = _FakeAdapter("native", DispatchResponse(success=True, plan={}, method="native"), available=False)
+        fallback = _FakeAdapter(
+            "fallback_cli", DispatchResponse(success=True, plan={}, method="fallback_cli"), available=False
+        )
+        engine = DispatchEngine(native_adapter=native, fallback_adapter=fallback)
+
+        response = engine.dispatch(DispatchRequest(task="t"))
+
+        self.assertFalse(response.success)
+        self.assertEqual(response.error_code, "NO_ADAPTER_AVAILABLE")
+        self.assertEqual(response.method, "error")
+        self.assertFalse(native.execute_called)
+        self.assertFalse(fallback.execute_called)
 
 
 if __name__ == "__main__":

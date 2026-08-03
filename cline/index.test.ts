@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { AgentTool } from "@cline/sdk";
-import { plugin, type SetupApi, type SetupContext } from "./index.ts";
+import { plugin, runPythonBridge, type SetupApi, type SetupContext } from "./index.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -283,5 +283,75 @@ describe("cadre plugin", () => {
     // sanitizeToolResult re-parses through JSON, which strips functions,
     // symbols, and undefined values. The result must be a plain object.
     expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+  });
+
+  it("reports a python3-missing error, not a missing-bridge error, when PATH excludes python3", async () => {
+    // Regression test: invokeNativeBridge's ENOENT handler used to blame a
+    // missing bridge.py, but that branch is only reachable after
+    // isBridgeAvailable() has already confirmed bridge.py exists — an
+    // ENOENT from spawning it actually means python3 itself isn't on PATH.
+    const originalPath = process.env.PATH;
+    process.env.PATH = "";
+    try {
+      const tools = await registerTools(REPO_ROOT);
+      const tool = findTool(tools, "agents_select");
+
+      const result = (await tool.execute(
+        { task: "test", files: "README.md" },
+        {} as never,
+      )) as Record<string, unknown>;
+
+      expect(typeof result.error).toBe("string");
+      expect(result.error).toMatch(/python3 not found on PATH/);
+      expect(result.error).not.toMatch(/bridge\.py.*not found/i);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  describe("runPythonBridge timeout/SIGKILL-escalation and buffer-overflow handling", () => {
+    // These call runPythonBridge directly (bypassing tool.execute()) with a
+    // throwaway script and short, test-only timeout/buffer overrides, so
+    // the timeout->SIGTERM->SIGKILL escalation and buffer-overflow guard
+    // added when fixing the original stdin-blocking bug can be exercised
+    // deterministically in milliseconds instead of the real 60s/10MB
+    // production limits.
+    let scriptDir: string;
+
+    beforeAll(() => {
+      scriptDir = mkdtempSync(path.join(tmpdir(), "cadre-cline-plugin-bridge-script-test-"));
+    });
+
+    afterAll(() => {
+      rmSync(scriptDir, { recursive: true, force: true });
+    });
+
+    it("times out and escalates to SIGKILL when the child ignores SIGTERM", async () => {
+      const hangingScript = path.join(scriptDir, "hang_ignoring_sigterm.py");
+      writeFileSync(
+        hangingScript,
+        "import signal, time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\ntime.sleep(60)\n",
+      );
+
+      // If SIGKILL escalation didn't work, 'close' would never fire and
+      // this await would hang until vitest's own test timeout (a slow,
+      // non-diagnostic failure) rather than a clean rejection — bounding
+      // via a short timeoutMs/killGraceMs makes this a fast, precise check.
+      await expect(
+        runPythonBridge("{}", scriptDir, { scriptPath: hangingScript, timeoutMs: 100, killGraceMs: 100 }),
+      ).rejects.toThrow(/timed out/i);
+    });
+
+    it("rejects and kills the child when output exceeds the buffer limit", async () => {
+      const verboseScript = path.join(scriptDir, "print_forever.py");
+      writeFileSync(
+        verboseScript,
+        "import sys\nwhile True:\n    sys.stdout.write('x' * 1000)\n    sys.stdout.flush()\n",
+      );
+
+      await expect(
+        runPythonBridge("{}", scriptDir, { scriptPath: verboseScript, maxBuffer: 100, timeoutMs: 5_000 }),
+      ).rejects.toThrow(/exceeded max buffer size/i);
+    });
   });
 });

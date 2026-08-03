@@ -124,7 +124,7 @@ if (bridgeAvailable) {
 
 ## Key Benefits
 
-1. **Performance**: Native bridge avoids CLI process spawn overhead (~50-100ms saved per call)
+1. **Performance**: Native bridge avoids the CLI's argument-parsing and shell-wrapper layer (`bin/cadre` execing into `python3` with argparse), going directly to the selection logic instead. Both paths still spawn one Python process (bridge.py itself, vs. `bin/cadre`'s python3), so this is not "process spawn overhead" avoidance as originally claimed here — no measured number is available; treat any specific timing figure as unverified until profiled.
 2. **Integration**: Direct access to LangGraph engine internals without CLI serialization
 3. **Backward Compatibility**: Falls back to CLI when bridge unavailable
 4. **Maintainability**: Clean separation between Node.js and Python layers
