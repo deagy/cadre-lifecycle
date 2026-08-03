@@ -46,6 +46,14 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 - `cline/package.json`'s version realigned to `0.1.0` to match every
   other manifest in this repository (it had drifted to `0.1.2`
   independently, with no corresponding release).
+- Removed root `package.json`'s npm workspace declaration
+  (`workspaces: ["cline"]` and its two forwarding scripts). It backed no
+  documented or actually-used workflow (every install/test instruction
+  in this repository runs `npm ...` from inside `cline/` directly, never
+  `npm ... --workspaces` from the root) and was an active footgun: npm
+  invoked inside `cline/` auto-detected the ancestor workspace root and
+  silently reached for a lockfile/`node_modules` there instead of
+  `cline/`'s own, on both `npm install` and `npm ci`.
 
 ## [0.1.0] - 2026-08-03
 
