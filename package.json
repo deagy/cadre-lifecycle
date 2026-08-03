@@ -4,13 +4,6 @@
   "private": true,
   "description": "Combined Cadre role selection and Agentic SDLC lifecycle governance",
   "type": "module",
-  "workspaces": [
-    "cline"
-  ],
-  "scripts": {
-    "test": "npm run test --workspaces",
-    "typecheck": "npm run typecheck --workspaces"
-  },
   "keywords": [
     "cadre",
     "lifecycle-governance",
