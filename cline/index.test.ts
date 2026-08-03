@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFile } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { AgentTool } from "@cline/sdk";
-import { plugin, type SetupApi, type SetupContext } from "./index.ts";
+import { plugin, runPythonBridge, type SetupApi, type SetupContext } from "./index.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -105,14 +105,18 @@ describe("cadre plugin", () => {
     expect(result.status).toBe("needs-triage");
   });
 
-  it("agents_select surfaces a real CLI failure as a structured error, not a throw", async () => {
+  it("agents_select surfaces a real dispatch failure as a structured error, not a throw", async () => {
     const tools = await registerTools(REPO_ROOT);
     const tool = findTool(tools, "agents_select");
 
-    // select_agents.py rejects --base combined with --files with a non-zero exit;
-    // this exercises the execFile non-zero-exit branch of the shared catch block
-    // (distinct from the JSON.parse-failure branch and the missing-rootPath guard),
-    // and incidentally covers the --base flag, which no other test passes.
+    // DispatchRequest.validate() (runtime.py) rejects --base combined with
+    // --files with the same wording as the CLI's select_agents.py; since
+    // bridge.py is vendored here, this exercises the native bridge's
+    // exit-code-1 structured-error path end to end (BridgeInvocationError
+    // in invokeNativeBridge, distinct from the JSON.parse-failure branch and
+    // the missing-rootPath guard), and incidentally covers the --base flag,
+    // which no other test passes. See the CLI-fallback-forced describe
+    // block above for the equivalent assertion against the CLI path.
     const result = (await tool.execute(
       { task: "test", files: "README.md", base: "main" },
       {} as never,
@@ -176,7 +180,12 @@ describe("cadre plugin", () => {
       rmSync(otherWorkspace, { recursive: true, force: true });
     });
 
-    it("resolves the cadre binary relative to this plugin, not the target workspace", async () => {
+    it("resolves the native bridge's `root` for a workspace that is not this checkout", async () => {
+      // bridge.py is vendored in this repo, so isBridgeAvailable() is true
+      // here and this exercises the native path (mapToBridgeInput forwarding
+      // rootPath as `root`), not the CLI-fallback path the original
+      // ENOENT regression above was about — see the sibling describe block
+      // below for a CLI-fallback-forced version of this same assertion.
       const tools = await registerTools(otherWorkspace);
       const tool = findTool(tools, "agents_select");
 
@@ -185,10 +194,80 @@ describe("cadre plugin", () => {
         {} as never,
       )) as Record<string, unknown>;
 
-      // Before the fix this was `{ error: "spawn ./bin/cadre ENOENT", ... }`.
       expect(result.error).toBeUndefined();
       expect(result.status).toBe("needs-triage");
       expect((result.inputs as Record<string, unknown>).repository_root).toBe(otherWorkspace);
+    });
+
+    describe("with the native bridge forcibly disabled (CADRE_DISABLE_NATIVE_BRIDGE=1)", () => {
+      // Regression test for the bug found investigating a Cline report of
+      // non-deterministic "JSON.stringify cannot serialize cyclic structures"
+      // errors: the plugin used to resolve the cadre binary as a bare
+      // "./bin/cadre" spawned with `cwd: rootPath`, which only ever worked
+      // when rootPath happened to be this repository itself — deterministically
+      // failing with `spawn ./bin/cadre ENOENT` for any other project. Since
+      // bridge.py is vendored in this repo, isBridgeAvailable() is normally
+      // always true here, so nothing would otherwise ever exercise CADRE_BIN
+      // resolution / buildSelectArgs / the execFileAsync CLI path in this
+      // suite. CADRE_DISABLE_NATIVE_BRIDGE forces that path deterministically.
+      const originalFlag = process.env.CADRE_DISABLE_NATIVE_BRIDGE;
+
+      beforeAll(() => {
+        process.env.CADRE_DISABLE_NATIVE_BRIDGE = "1";
+      });
+
+      afterAll(() => {
+        if (originalFlag === undefined) delete process.env.CADRE_DISABLE_NATIVE_BRIDGE;
+        else process.env.CADRE_DISABLE_NATIVE_BRIDGE = originalFlag;
+      });
+
+      it("resolves the cadre binary relative to this plugin, not the target workspace", async () => {
+        const tools = await registerTools(otherWorkspace);
+        const tool = findTool(tools, "agents_select");
+
+        const result = (await tool.execute(
+          { task: "xyzzy plugh", files: "no-such-extension.zzz" },
+          {} as never,
+        )) as Record<string, unknown>;
+
+        // Before the fix this was `{ error: "spawn ./bin/cadre ENOENT", ... }`.
+        expect(result.error).toBeUndefined();
+        expect(result.status).toBe("needs-triage");
+        expect((result.inputs as Record<string, unknown>).repository_root).toBe(otherWorkspace);
+      });
+    });
+  });
+
+  describe("agents_select default invocation (no files, no base) against the native bridge", () => {
+    // Regression test for the bug where NativeDispatchAdapter returned
+    // ([], "none") instead of mirroring the CLI's git-status fallback for
+    // the default no-args invocation shape — the single most common way
+    // this tool is actually called.
+    let dirtyWorkspace: string;
+
+    beforeAll(async () => {
+      dirtyWorkspace = mkdtempSync(path.join(tmpdir(), "cadre-cline-plugin-git-status-test-"));
+      await execFileAsync("git", ["init", "-q"], { cwd: dirtyWorkspace });
+      writeFileSync(path.join(dirtyWorkspace, "dirty.txt"), "uncommitted\n");
+    });
+
+    afterAll(() => {
+      rmSync(dirtyWorkspace, { recursive: true, force: true });
+    });
+
+    it("discovers the dirty working tree via git-status, not an empty file list", async () => {
+      const tools = await registerTools(dirtyWorkspace);
+      const tool = findTool(tools, "agents_select");
+
+      const result = (await tool.execute({ task: "xyzzy plugh" }, {} as never)) as Record<
+        string,
+        unknown
+      >;
+
+      expect(result.error).toBeUndefined();
+      const inputs = result.inputs as Record<string, unknown>;
+      expect(inputs.changed_file_source).toBe("git-status");
+      expect(inputs.changed_files).toContain("dirty.txt");
     });
   });
 
@@ -204,5 +283,120 @@ describe("cadre plugin", () => {
     // sanitizeToolResult re-parses through JSON, which strips functions,
     // symbols, and undefined values. The result must be a plain object.
     expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+  });
+
+  it("reports a python3-missing error, not a missing-bridge error, when PATH excludes python3", async () => {
+    // Regression test: invokeNativeBridge's ENOENT handler used to blame a
+    // missing bridge.py, but that branch is only reachable after
+    // isBridgeAvailable() has already confirmed bridge.py exists — an
+    // ENOENT from spawning it actually means python3 itself isn't on PATH.
+    const originalPath = process.env.PATH;
+    process.env.PATH = "";
+    try {
+      const tools = await registerTools(REPO_ROOT);
+      const tool = findTool(tools, "agents_select");
+
+      const result = (await tool.execute(
+        { task: "test", files: "README.md" },
+        {} as never,
+      )) as Record<string, unknown>;
+
+      expect(typeof result.error).toBe("string");
+      expect(result.error).toMatch(/python3 not found on PATH/);
+      expect(result.error).not.toMatch(/bridge\.py.*not found/i);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  describe("runPythonBridge timeout/SIGKILL-escalation and buffer-overflow handling", () => {
+    // These call runPythonBridge directly (bypassing tool.execute()) with a
+    // throwaway script and short, test-only timeout/buffer overrides, so
+    // the timeout->SIGTERM->SIGKILL escalation and buffer-overflow guard
+    // added when fixing the original stdin-blocking bug can be exercised
+    // deterministically in milliseconds instead of the real 60s/10MB
+    // production limits.
+    let scriptDir: string;
+
+    beforeAll(() => {
+      scriptDir = mkdtempSync(path.join(tmpdir(), "cadre-cline-plugin-bridge-script-test-"));
+    });
+
+    afterAll(() => {
+      rmSync(scriptDir, { recursive: true, force: true });
+    });
+
+    it("times out and escalates to SIGKILL when the child ignores SIGTERM", async () => {
+      const hangingScript = path.join(scriptDir, "hang_ignoring_sigterm.py");
+      writeFileSync(
+        hangingScript,
+        "import signal, time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\ntime.sleep(60)\n",
+      );
+
+      // timeoutMs is generous enough (300ms) that the interpreter has
+      // reliably finished installing the SIGTERM-ignore handler before the
+      // timer fires — with a very short timeoutMs (e.g. 100ms) there's a
+      // real race where the child could still die from the *plain* SIGTERM
+      // if the ignore handler hadn't been installed yet, which would make
+      // this pass without ever exercising the SIGKILL escalation it claims
+      // to test. Asserting the elapsed time is >= timeoutMs + killGraceMs
+      // (not just that it eventually rejects with a "timed out" message)
+      // is what actually distinguishes "SIGKILL fired" from "plain SIGTERM
+      // happened to work" — the latter would resolve close to timeoutMs
+      // alone, never waiting out the full grace period. The upper bound
+      // guards against this becoming a slow, non-diagnostic hang instead
+      // of a clean rejection if escalation ever stopped working.
+      const timeoutMs = 300;
+      const killGraceMs = 200;
+      const startedAt = Date.now();
+
+      await expect(
+        runPythonBridge("{}", scriptDir, { scriptPath: hangingScript, timeoutMs, killGraceMs }),
+      ).rejects.toThrow(/timed out/i);
+
+      const elapsedMs = Date.now() - startedAt;
+      expect(elapsedMs).toBeGreaterThanOrEqual(timeoutMs + killGraceMs - 20); // small timer-granularity tolerance
+      expect(elapsedMs).toBeLessThan(timeoutMs + killGraceMs + 2_000); // generous ceiling against a true hang
+    });
+
+    it("rejects and kills the child when output exceeds the buffer limit", async () => {
+      const verboseScript = path.join(scriptDir, "print_forever.py");
+      writeFileSync(
+        verboseScript,
+        "import sys\nwhile True:\n    sys.stdout.write('x' * 1000)\n    sys.stdout.flush()\n",
+      );
+
+      // timeoutMs here is this test's own internal fallback, not the thing
+      // under test (the overflow guard should reject long before it), but
+      // it must sit comfortably below vitest's own default per-test
+      // timeout (5000ms, unconfigured in this repo) or a slower-than-
+      // expected overflow detection would hit that opaque outer timeout
+      // instead of this precise rejection assertion.
+      await expect(
+        runPythonBridge("{}", scriptDir, { scriptPath: verboseScript, maxBuffer: 100, timeoutMs: 2_000 }),
+      ).rejects.toThrow(/exceeded max buffer size/i);
+    });
+
+    it("does not crash on an EPIPE-style stdin write after the child has already closed its read end", async () => {
+      // Regression test for the original bug: an unguarded 'error' event on
+      // child.stdin (e.g. EPIPE from writing after the child closed fd 0)
+      // is an uncaught exception in Node and can crash the whole host
+      // process. Reliably forcing that exact race from outside
+      // runPythonBridge isn't possible without instrumenting it further
+      // (the write happens synchronously right after spawn(), before the
+      // child has necessarily even started) — this is a best-effort trigger
+      // (a large payload against a script that closes its stdin fd
+      // immediately) rather than a guaranteed reproduction. Its value is
+      // structural: if the `child.stdin.on("error", ...)` guard were ever
+      // removed, a triggered race here would crash this test file's whole
+      // process instead of failing this one assertion.
+      const closesStdinScript = path.join(scriptDir, "close_stdin_immediately.py");
+      writeFileSync(closesStdinScript, "import os\nos.close(0)\n");
+      const largePayload = "x".repeat(256 * 1024); // past typical OS pipe buffer sizes
+
+      await expect(
+        runPythonBridge(largePayload, scriptDir, { scriptPath: closesStdinScript, timeoutMs: 2_000 }),
+      ).resolves.toBeDefined();
+    });
   });
 });

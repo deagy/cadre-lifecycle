@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -24,16 +24,13 @@ const execFileAsync = promisify(execFile);
 const PLUGIN_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CADRE_BIN = path.resolve(PLUGIN_DIR, "..", "bin", "cadre");
 
-// The LangGraph engine lives at <repo-root>/agentic_sdlc_langgraph/ in the
-// agentic-sdlc repository. The bridge.py module (being authored by the
-// python-bridge-dev agent) will expose a JSON-over-stdin/stdout interface for
-// the `select` subcommand. We resolve it relative to the repository root so
-// the cline plugin can find it regardless of where it's installed.
-//
-// The bridge path is: <repo-root>/agentic_sdlc_langgraph/bridge.py
-// We detect its presence at setup time and choose the execution path accordingly.
-const LANGGRAPH_ENGINE_DIR = path.resolve(PLUGIN_DIR, "..", "..", "agentic-sdlc", "agentic_sdlc_langgraph");
-const PYTHON_BRIDGE = path.resolve(LANGGRAPH_ENGINE_DIR, "bridge.py");
+// The LangGraph engine is vendored in this repository at
+// <repo-root>/agentic_sdlc_langgraph/, one level up from cline/ (same
+// one-vs-two-level distinction as CADRE_BIN above — this plugin's root is
+// the packaged repository root, not a sibling checkout). bridge.py exposes a
+// JSON-over-stdin/stdout interface for the `select` subcommand. We detect its
+// presence at setup time and choose the execution path accordingly.
+const PYTHON_BRIDGE = path.resolve(PLUGIN_DIR, "..", "agentic_sdlc_langgraph", "bridge.py");
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -87,31 +84,28 @@ interface BridgeSelectInput {
   task_id?: string;
   classification?: string;
   require_sdlc?: boolean;
+  root?: string;
 }
 
 /**
- * Output shape produced by the Python bridge via stdout as JSON.
- * Matches the existing CLI output format for seamless integration.
+ * The dispatch plan itself, as returned by `select_agents.py` and wrapped in
+ * the bridge's `plan` field. Flat CLI-shaped plan object (status, agents,
+ * matched_routes, task_id, inputs, ...).
  */
-interface BridgeSelectOutput {
-  status: string;
-  agents?: unknown[];
-  matched_routes?: unknown[];
-  task_id?: string;
-  inputs?: Record<string, unknown>;
+type DispatchPlan = Record<string, unknown>;
+
+/**
+ * Raw envelope produced by bridge.py via stdout as JSON — see bridge.py's
+ * module docstring for the authoritative contract. On success the plan is
+ * nested under `plan`, not returned flat; on failure there is no `plan`.
+ */
+interface BridgeEnvelope {
+  success: boolean;
+  plan?: DispatchPlan;
   error?: string;
-  detail?: string;
-  stderr?: string;
-  [key: string]: unknown;
-}
-
-/**
- * Error shape produced by the Python bridge on failure.
- */
-interface BridgeSelectError {
-  error: string;
-  stderr?: string;
-  detail?: string;
+  error_code?: string;
+  method: string;
+  generated_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,8 +117,17 @@ import { existsSync } from "node:fs";
 /**
  * Check whether the Python bridge module is available for native invocation.
  * Returns true if bridge.py exists at the expected location.
+ *
+ * CADRE_DISABLE_NATIVE_BRIDGE=1 forces the CLI-fallback path even when the
+ * bridge is present. This exists so the CLI-fallback path (CADRE_BIN
+ * resolution, buildSelectArgs, execFileAsync error mapping) can be exercised
+ * deterministically — bridge.py is vendored in this repo, so it is normally
+ * always available and that path would otherwise never run in this repo's
+ * own test suite — and doubles as a manual escape hatch for diagnosing a
+ * misbehaving native bridge in the field.
  */
 function isBridgeAvailable(): boolean {
+  if (process.env.CADRE_DISABLE_NATIVE_BRIDGE === "1") return false;
   return existsSync(PYTHON_BRIDGE);
 }
 
@@ -148,10 +151,18 @@ function buildSelectArgs(input: AgentsSelectInput, rootPath: string): string[] {
 
 /**
  * Map AgentsSelectInput to the bridge's expected snake_case JSON format.
+ *
+ * `rootPath` is passed separately (mirroring `buildSelectArgs`'s CLI-path
+ * signature): it comes from the host session's `ctx.workspaceInfo`, not
+ * from `AgentsSelectInput` itself, and the bridge defaults to operating on
+ * its own repository root when it's omitted — it must always be forwarded
+ * explicitly so the native path targets the same workspace the CLI path
+ * would.
  */
-function mapToBridgeInput(input: AgentsSelectInput): BridgeSelectInput {
+function mapToBridgeInput(input: AgentsSelectInput, rootPath: string): BridgeSelectInput {
   const bridgeInput: BridgeSelectInput = {
     task: input.task,
+    root: rootPath,
   };
   if (input.files) bridgeInput.files = input.files;
   if (input.base) bridgeInput.base = input.base;
@@ -179,10 +190,145 @@ function mapToBridgeInput(input: AgentsSelectInput): BridgeSelectInput {
  * @returns The parsed bridge output
  * @throws BridgeInvocationError on Python errors or non-zero exit codes
  */
+const BRIDGE_MAX_BUFFER = 10 * 1024 * 1024; // 10 MB buffer for large plans
+const BRIDGE_TIMEOUT_MS = 60_000;
+
+/**
+ * Run the Python bridge as a child process, writing `input` to its stdin.
+ *
+ * `child_process.execFile`'s `input` option only exists on the synchronous
+ * (`execFileSync`) API — the asynchronous API (and its promisify()-wrapped
+ * form used elsewhere in this file for the CLI path) silently ignores an
+ * `input` field in its options object. Passing it there does not write
+ * anything to the child's stdin, so a child that reads from stdin (as
+ * bridge.py does) blocks forever and is only ever unblocked by the `timeout`
+ * option's kill — every native-bridge call would silently eat the full
+ * timeout on every invocation. `spawn` is used directly here instead so
+ * `input` can be written to `child.stdin` explicitly.
+ *
+ * bridge.py's own contract (see its module docstring) uses exit code 1,
+ * not just a non-zero-but-uninspected failure, to signal a *structured*
+ * JSON error on stdout (`{success: false, error, error_code, ...}`) — it is
+ * not an unexpected/crash exit. This resolves on any exit code so the
+ * caller can parse that JSON envelope either way; only a spawn failure,
+ * timeout, or buffer overflow (none of which produce a JSON envelope)
+ * reject.
+ *
+ * `scriptPath`/`timeoutMs`/`maxBuffer`/`killGraceMs` default to the real
+ * bridge and production limits; overridable only so tests can exercise the
+ * timeout/SIGKILL-escalation and buffer-overflow branches deterministically
+ * and quickly (a throwaway hung/verbose script, millisecond-scale timeouts)
+ * without waiting on the real 60s/10MB production limits. Not part of the
+ * tool's own input surface — `execute()` never passes anything but the
+ * defaults.
+ */
+export function runPythonBridge(
+  input: string,
+  cwd: string,
+  options: {
+    scriptPath?: string;
+    timeoutMs?: number;
+    maxBuffer?: number;
+    killGraceMs?: number;
+  } = {},
+): Promise<{ stdout: string; stderr: string }> {
+  const {
+    scriptPath = PYTHON_BRIDGE,
+    timeoutMs = BRIDGE_TIMEOUT_MS,
+    maxBuffer = BRIDGE_MAX_BUFFER,
+    killGraceMs = 5_000,
+  } = options;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn("python3", [scriptPath], { cwd });
+
+    let stdout = "";
+    let stderr = "";
+    let overflowed = false;
+    let timedOut = false;
+
+    let killTimer: NodeJS.Timeout | undefined;
+    let terminating = false;
+
+    // Send SIGTERM, then escalate to SIGKILL if the child ignores it (e.g.
+    // blocked in an uninterruptible syscall) rather than leaving it to
+    // linger forever. Shared by both the overall timeout and the
+    // buffer-overflow guard below, so neither kill path can leak a process.
+    // killTimer is cleared on 'close'/'error' if the child exits before it
+    // fires — otherwise it would outlive a clean exit and could, in the
+    // unlikely event the OS reuses the PID within the window, signal an
+    // unrelated process. Guarded against double-invocation: if the
+    // overflow guard and the overall timeout both fire for the same child
+    // (e.g. overflow trips just before the timer would have anyway), a
+    // second call would silently overwrite `killTimer`'s reference to the
+    // first scheduled SIGKILL, making that first timer unreachable for the
+    // close/error cleanup below — the same "outlive a clean exit" risk this
+    // cleanup exists to prevent, just reached a different way.
+    function terminateWithEscalation(): void {
+      if (terminating) return;
+      terminating = true;
+      child.kill("SIGTERM");
+      killTimer = setTimeout(() => child.kill("SIGKILL"), killGraceMs);
+    }
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      terminateWithEscalation();
+    }, timeoutMs);
+
+    child.stdout.setEncoding("utf-8");
+    child.stderr.setEncoding("utf-8");
+
+    // A write to `child.stdin` after the child has already exited (or
+    // refuses the pipe) emits an 'error' event (e.g. EPIPE); with no
+    // listener, Node treats that as an uncaught exception and can crash the
+    // whole host process. The actual failure is still reported below via
+    // the 'close' handler (the process still exits and fires 'close'
+    // even after a stdin EPIPE), so this listener only needs to exist.
+    child.stdin.on("error", () => {});
+
+    child.stdout.on("data", (chunk: string) => {
+      if (overflowed) return;
+      stdout += chunk;
+      if (stdout.length > maxBuffer) {
+        overflowed = true;
+        terminateWithEscalation();
+      }
+    });
+    child.stderr.on("data", (chunk: string) => {
+      if (overflowed) return;
+      stderr += chunk;
+    });
+
+    child.on("error", (err: NodeJS.ErrnoException) => {
+      clearTimeout(timer);
+      clearTimeout(killTimer);
+      reject(err);
+    });
+
+    child.on("close", () => {
+      clearTimeout(timer);
+      clearTimeout(killTimer);
+      if (timedOut) {
+        reject(Object.assign(new Error("Bridge invocation timed out"), { stdout, stderr }));
+        return;
+      }
+      if (overflowed) {
+        reject(Object.assign(new Error("Bridge output exceeded max buffer size"), { stdout, stderr }));
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+
+    child.stdin.write(input);
+    child.stdin.end();
+  });
+}
+
 async function invokeNativeBridge(
   bridgeInput: BridgeSelectInput,
   rootPath: string,
-): Promise<BridgeSelectOutput> {
+): Promise<DispatchPlan> {
   const stdinJson = JSON.stringify(bridgeInput);
 
   // Log the invocation for debugging
@@ -194,30 +340,19 @@ async function invokeNativeBridge(
   );
 
   try {
-    // Note: The `input` option for execFile is supported in Node.js 20.12.0+
-    // and 21.7.0+. We use a type assertion to bypass TypeScript's strict
-    // checking since the types don't yet include the `input` option.
-    const result = await execFileAsync("python3", [PYTHON_BRIDGE], {
-      input: stdinJson,
-      cwd: rootPath,
-      encoding: "utf-8",
-      maxBuffer: 10 * 1024 * 1024, // 10 MB buffer for large plans
-      timeout: 60_000, // 60 second timeout
-    } as never);
-
-    // Safely extract stdout/stderr as strings (encoding is utf-8)
-    const stdout = typeof result.stdout === "string" ? result.stdout : result.stdout.toString();
-    const stderr = typeof result.stderr === "string" ? result.stderr : result.stderr.toString();
+    const { stdout, stderr } = await runPythonBridge(stdinJson, rootPath);
 
     // Log stderr from the bridge (warnings, etc.)
     if (stderr?.trim()) {
       console.error(`[agents_select] Bridge stderr: ${stderr.trim()}`);
     }
 
-    // Parse the JSON output
-    let output: BridgeSelectOutput;
+    // Parse the JSON envelope (see bridge.py's module docstring for the
+    // contract: {success, plan} on success, {success: false, error,
+    // error_code} on failure — the plan is never returned flat).
+    let envelope: BridgeEnvelope;
     try {
-      output = JSON.parse(stdout) as BridgeSelectOutput;
+      envelope = JSON.parse(stdout) as BridgeEnvelope;
     } catch (parseError) {
       throw new BridgeInvocationError(
         "Bridge produced invalid JSON output",
@@ -226,28 +361,34 @@ async function invokeNativeBridge(
       );
     }
 
-    // Check for error indicator in the output
-    if (output.error) {
+    if (!envelope.success || !envelope.plan) {
       throw new BridgeInvocationError(
-        output.error,
+        envelope.error || "Bridge reported failure with no error message",
         stdout,
         stderr,
-        output.detail,
+        envelope.error_code,
       );
     }
 
     console.error(`[agents_select] Bridge invocation successful`);
-    return output;
+    return envelope.plan;
   } catch (error) {
     if (error instanceof BridgeInvocationError) {
       throw error;
     }
 
-    // Handle Python execution errors (ENOENT, permission denied, etc.)
-    const err = error as { message?: string; stderr?: string; code?: string };
+    // Handle Python execution errors (ENOENT, permission denied, etc.), and
+    // timeout/overflow rejections from runPythonBridge, which attach
+    // whatever partial stdout/stderr had been captured.
+    const err = error as { message?: string; stdout?: string; stderr?: string; code?: string };
     if (err.code === "ENOENT") {
+      // invokeNativeBridge is only reached when isBridgeAvailable() already
+      // confirmed PYTHON_BRIDGE exists on disk, so an ENOENT from spawning
+      // it means the *python3* executable itself is missing from PATH, not
+      // that bridge.py is missing — don't misdirect troubleshooting at the
+      // wrong artifact.
       throw new BridgeInvocationError(
-        `Python bridge not found at ${PYTHON_BRIDGE}. Ensure the agentic-sdlc LangGraph engine is installed.`,
+        `python3 not found on PATH while invoking the LangGraph bridge at ${PYTHON_BRIDGE}. Ensure Python 3 is installed and on PATH.`,
         "",
         "",
       );
@@ -255,7 +396,7 @@ async function invokeNativeBridge(
 
     throw new BridgeInvocationError(
       err.message || "Bridge invocation failed",
-      "",
+      err.stdout ?? "",
       err.stderr,
     );
   }
@@ -348,7 +489,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
           // Choose execution path based on bridge availability
           if (bridgeAvailable) {
             // Native bridge path: faster, more integrated
-            const bridgeInput = mapToBridgeInput(input);
+            const bridgeInput = mapToBridgeInput(input, rootPath);
             const output = await invokeNativeBridge(bridgeInput, rootPath);
             return sanitizeToolResult(output);
           } else {

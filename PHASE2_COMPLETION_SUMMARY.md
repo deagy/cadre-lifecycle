@@ -2,7 +2,7 @@
 
 ## Native Tool-Call Integration: agents_select + LangGraph Engine
 
-**Status**: ✅ **COMPLETE**
+**Status**: ✅ **COMPLETE, VERIFIED** — see "Post-Phase-2 correction" below; the automated tests this summary originally listed as un-run have since actually been run and pass, including against the native bridge path specifically
 
 **Date**: August 3, 2026
 
@@ -124,7 +124,7 @@ if (bridgeAvailable) {
 
 ## Key Benefits
 
-1. **Performance**: Native bridge avoids CLI process spawn overhead (~50-100ms saved per call)
+1. **Performance**: Native bridge avoids the CLI's argument-parsing and shell-wrapper layer (`bin/cadre` execing into `python3` with argparse), going directly to the selection logic instead. Both paths still spawn one Python process (bridge.py itself, vs. `bin/cadre`'s python3), so this is not "process spawn overhead" avoidance as originally claimed here — no measured number is available; treat any specific timing figure as unverified until profiled.
 2. **Integration**: Direct access to LangGraph engine internals without CLI serialization
 3. **Backward Compatibility**: Falls back to CLI when bridge unavailable
 4. **Maintainability**: Clean separation between Node.js and Python layers
@@ -201,6 +201,10 @@ cline plugin install . --force
 
 ## Conclusion
 
-Phase 2 is **complete and ready for deployment**. The `agents_select` tool call now has native LangGraph engine integration with automatic fallback to the CLI for backward compatibility. This provides a faster, more integrated, and more maintainable solution for agent dispatch.
+Phase 2's core implementation is done: the `agents_select` tool call has native LangGraph engine integration with automatic fallback to the CLI for backward compatibility. At the time this summary was originally written, the integration-testing step had been aborted and the automated test commands above had never actually been run against this integration (see "Team Contributions" and "Automated Testing").
 
-**Ready for Phase 3 or production deployment.**
+## Post-Phase-2 correction
+
+A later fix (PR #1, "Fix post-split docs and native LangGraph bridge drift") found that the native bridge path described above had never actually been reachable: `cline/index.ts` resolved the bridge's file path two directories too high, so `agents_select` silently used the CLI-fallback path on every call, masking the integration this Phase actually claimed to deliver. Fixing that path exposed and required fixing several further bugs before the native path worked at all (Node's `execFile` `input` option being a no-op, a response-envelope shape mismatch, a missing `root` parameter, and a changed-file-discovery gap) — see that PR's description for detail.
+
+The automated tests above have now genuinely been run and pass, with dedicated coverage added to distinguish the native bridge path from the CLI-fallback path (previously indistinguishable from a test's perspective, since both can produce an equivalent-looking successful plan). **Ready for Phase 3**, with the caveat that "integration testing" in the original sense planned above (an `integration-tester` QA pass) still never happened as its own discrete activity — the coverage added since is unit/adapter-level, not a full end-to-end QA pass.

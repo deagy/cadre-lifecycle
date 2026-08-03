@@ -15,9 +15,7 @@ This repository merges the role-selection capabilities of [Cadre](https://github
 
 ```
 .
-├── agentic_sdlc/              # Portable lifecycle kernel (G1–G10)
-├── agentic_sdlc_langgraph/    # LangGraph orchestration engine
-├── providers/                 # Provider packages (agent catalogs, profiles)
+├── agentic_sdlc_langgraph/    # LangGraph orchestration engine (vendored)
 ├── cline/                     # Cline plugin (agents_select tool call)
 ├── bin/cadre                  # CLI dispatcher for role selection
 ├── agent-catalog.json         # Agent role catalog (generated)
@@ -27,13 +25,16 @@ This repository merges the role-selection capabilities of [Cadre](https://github
 ├── skills/                    # Suite skills
 ├── agents/                    # Agent roles and policies
 ├── codex-agents/              # Codex CLI agent definitions
-├── suite/                     # Orchestration runtime
+├── suite/roster/              # Catalog, routing, and orchestration source
+│                               # (suite/roster/catalog.yaml, suite/roster/orchestration/src/select_agents.py)
 ├── tools/                     # Plugin versioning and utilities
 ├── .claude-plugin/            # Claude Code plugin manifest
 ├── .codex-plugin/             # Codex CLI plugin manifest
 ├── .agents/                   # Publishable skills
 └── package.json               # Workspace root
 ```
+
+The G1–G10 Agentic SDLC kernel (`deagy/agentic-sdlc`) is an external dependency, not vendored in this repository — see "Lifecycle Governance with Agentic SDLC" below.
 
 ## Installing
 
@@ -121,7 +122,7 @@ This project combines two independent systems:
 | Component | Source | Responsibility |
 |---|---|---|
 | **Cadre Register** | [deagy/cadre](https://github.com/deagy/cadre) | Role definitions, catalog, routing (independent, not vendored) |
-| **Agentic SDLC Kernel** | [deagy/agentic-sdlc](https://github.com/deagy/agentic-sdlc) | Lifecycle gates, run-record validation, gate authority (vendored here) |
+| **Agentic SDLC Kernel** | [deagy/agentic-sdlc](https://github.com/deagy/agentic-sdlc) | Lifecycle gates, run-record validation, gate authority (external dependency, not vendored) |
 | **Cline Plugin** | This repository | `agents_select` tool call for agent dispatch |
 
 The Cadre register remains the source of truth for role definitions. Assets in this repository are generated from the register and can be refreshed by running `cadre generate-plugin` against an independent register checkout.
@@ -134,11 +135,8 @@ The Cadre register remains the source of truth for role definitions. Assets in t
 # Cline plugin tests
 cd cline && npm test
 
-# Agentic SDLC kernel tests
-cd agentic_sdlc && python3 -B -m unittest discover -s test -p "test_*.py"
-
 # LangGraph engine tests
-cd agentic_sdlc_langgraph && uv sync && uv run pytest
+cd agentic_sdlc_langgraph && python3 -m unittest discover -s . -p "test_*.py" -v
 ```
 
 ### Regenerating Assets
