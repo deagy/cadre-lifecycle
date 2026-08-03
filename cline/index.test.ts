@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFile } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -105,14 +105,18 @@ describe("cadre plugin", () => {
     expect(result.status).toBe("needs-triage");
   });
 
-  it("agents_select surfaces a real CLI failure as a structured error, not a throw", async () => {
+  it("agents_select surfaces a real dispatch failure as a structured error, not a throw", async () => {
     const tools = await registerTools(REPO_ROOT);
     const tool = findTool(tools, "agents_select");
 
-    // select_agents.py rejects --base combined with --files with a non-zero exit;
-    // this exercises the execFile non-zero-exit branch of the shared catch block
-    // (distinct from the JSON.parse-failure branch and the missing-rootPath guard),
-    // and incidentally covers the --base flag, which no other test passes.
+    // DispatchRequest.validate() (runtime.py) rejects --base combined with
+    // --files with the same wording as the CLI's select_agents.py; since
+    // bridge.py is vendored here, this exercises the native bridge's
+    // exit-code-1 structured-error path end to end (BridgeInvocationError
+    // in invokeNativeBridge, distinct from the JSON.parse-failure branch and
+    // the missing-rootPath guard), and incidentally covers the --base flag,
+    // which no other test passes. See the CLI-fallback-forced describe
+    // block above for the equivalent assertion against the CLI path.
     const result = (await tool.execute(
       { task: "test", files: "README.md", base: "main" },
       {} as never,
@@ -176,7 +180,12 @@ describe("cadre plugin", () => {
       rmSync(otherWorkspace, { recursive: true, force: true });
     });
 
-    it("resolves the cadre binary relative to this plugin, not the target workspace", async () => {
+    it("resolves the native bridge's `root` for a workspace that is not this checkout", async () => {
+      // bridge.py is vendored in this repo, so isBridgeAvailable() is true
+      // here and this exercises the native path (mapToBridgeInput forwarding
+      // rootPath as `root`), not the CLI-fallback path the original
+      // ENOENT regression above was about — see the sibling describe block
+      // below for a CLI-fallback-forced version of this same assertion.
       const tools = await registerTools(otherWorkspace);
       const tool = findTool(tools, "agents_select");
 
@@ -185,10 +194,80 @@ describe("cadre plugin", () => {
         {} as never,
       )) as Record<string, unknown>;
 
-      // Before the fix this was `{ error: "spawn ./bin/cadre ENOENT", ... }`.
       expect(result.error).toBeUndefined();
       expect(result.status).toBe("needs-triage");
       expect((result.inputs as Record<string, unknown>).repository_root).toBe(otherWorkspace);
+    });
+
+    describe("with the native bridge forcibly disabled (CADRE_DISABLE_NATIVE_BRIDGE=1)", () => {
+      // Regression test for the bug found investigating a Cline report of
+      // non-deterministic "JSON.stringify cannot serialize cyclic structures"
+      // errors: the plugin used to resolve the cadre binary as a bare
+      // "./bin/cadre" spawned with `cwd: rootPath`, which only ever worked
+      // when rootPath happened to be this repository itself — deterministically
+      // failing with `spawn ./bin/cadre ENOENT` for any other project. Since
+      // bridge.py is vendored in this repo, isBridgeAvailable() is normally
+      // always true here, so nothing would otherwise ever exercise CADRE_BIN
+      // resolution / buildSelectArgs / the execFileAsync CLI path in this
+      // suite. CADRE_DISABLE_NATIVE_BRIDGE forces that path deterministically.
+      const originalFlag = process.env.CADRE_DISABLE_NATIVE_BRIDGE;
+
+      beforeAll(() => {
+        process.env.CADRE_DISABLE_NATIVE_BRIDGE = "1";
+      });
+
+      afterAll(() => {
+        if (originalFlag === undefined) delete process.env.CADRE_DISABLE_NATIVE_BRIDGE;
+        else process.env.CADRE_DISABLE_NATIVE_BRIDGE = originalFlag;
+      });
+
+      it("resolves the cadre binary relative to this plugin, not the target workspace", async () => {
+        const tools = await registerTools(otherWorkspace);
+        const tool = findTool(tools, "agents_select");
+
+        const result = (await tool.execute(
+          { task: "xyzzy plugh", files: "no-such-extension.zzz" },
+          {} as never,
+        )) as Record<string, unknown>;
+
+        // Before the fix this was `{ error: "spawn ./bin/cadre ENOENT", ... }`.
+        expect(result.error).toBeUndefined();
+        expect(result.status).toBe("needs-triage");
+        expect((result.inputs as Record<string, unknown>).repository_root).toBe(otherWorkspace);
+      });
+    });
+  });
+
+  describe("agents_select default invocation (no files, no base) against the native bridge", () => {
+    // Regression test for the bug where NativeDispatchAdapter returned
+    // ([], "none") instead of mirroring the CLI's git-status fallback for
+    // the default no-args invocation shape — the single most common way
+    // this tool is actually called.
+    let dirtyWorkspace: string;
+
+    beforeAll(async () => {
+      dirtyWorkspace = mkdtempSync(path.join(tmpdir(), "cadre-cline-plugin-git-status-test-"));
+      await execFileAsync("git", ["init", "-q"], { cwd: dirtyWorkspace });
+      writeFileSync(path.join(dirtyWorkspace, "dirty.txt"), "uncommitted\n");
+    });
+
+    afterAll(() => {
+      rmSync(dirtyWorkspace, { recursive: true, force: true });
+    });
+
+    it("discovers the dirty working tree via git-status, not an empty file list", async () => {
+      const tools = await registerTools(dirtyWorkspace);
+      const tool = findTool(tools, "agents_select");
+
+      const result = (await tool.execute({ task: "xyzzy plugh" }, {} as never)) as Record<
+        string,
+        unknown
+      >;
+
+      expect(result.error).toBeUndefined();
+      const inputs = result.inputs as Record<string, unknown>;
+      expect(inputs.changed_file_source).toBe("git-status");
+      expect(inputs.changed_files).toContain("dirty.txt");
     });
   });
 

@@ -136,7 +136,7 @@ The Cadre register remains the source of truth for role definitions. Assets in t
 cd cline && npm test
 
 # LangGraph engine tests
-cd agentic_sdlc_langgraph && python3 -m unittest test_bridge -v
+cd agentic_sdlc_langgraph && python3 -m unittest discover -s . -p "test_*.py" -v
 ```
 
 ### Regenerating Assets

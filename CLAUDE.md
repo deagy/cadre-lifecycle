@@ -29,7 +29,7 @@ The kernel's own test suite lives in its source repository, `deagy/agentic-sdlc`
 ### LangGraph Engine (`agentic_sdlc_langgraph/`)
 
 ```sh
-cd agentic_sdlc_langgraph && python3 -m unittest test_bridge -v        # engine tests
+cd agentic_sdlc_langgraph && python3 -m unittest discover -s . -p "test_*.py" -v   # engine tests
 ```
 
 ### CLI Tools (`bin/cadre`)

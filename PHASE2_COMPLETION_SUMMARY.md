@@ -2,7 +2,7 @@
 
 ## Native Tool-Call Integration: agents_select + LangGraph Engine
 
-**Status**: ⚠️ **COMPLETE WITH GAPS** — core implementation done, integration testing aborted (see Team Contributions)
+**Status**: ✅ **COMPLETE, VERIFIED** — see "Post-Phase-2 correction" below; the automated tests this summary originally listed as un-run have since actually been run and pass, including against the native bridge path specifically
 
 **Date**: August 3, 2026
 
@@ -201,6 +201,10 @@ cline plugin install . --force
 
 ## Conclusion
 
-Phase 2's core implementation is done: the `agents_select` tool call has native LangGraph engine integration with automatic fallback to the CLI for backward compatibility. However, the integration-testing step was aborted and the automated test commands above were never actually run against this integration (see "Team Contributions" and "Automated Testing").
+Phase 2's core implementation is done: the `agents_select` tool call has native LangGraph engine integration with automatic fallback to the CLI for backward compatibility. At the time this summary was originally written, the integration-testing step had been aborted and the automated test commands above had never actually been run against this integration (see "Team Contributions" and "Automated Testing").
 
-**Not yet ready for Phase 3 or production deployment** — run the automated tests and complete integration testing first.
+## Post-Phase-2 correction
+
+A later fix (PR #1, "Fix post-split docs and native LangGraph bridge drift") found that the native bridge path described above had never actually been reachable: `cline/index.ts` resolved the bridge's file path two directories too high, so `agents_select` silently used the CLI-fallback path on every call, masking the integration this Phase actually claimed to deliver. Fixing that path exposed and required fixing several further bugs before the native path worked at all (Node's `execFile` `input` option being a no-op, a response-envelope shape mismatch, a missing `root` parameter, and a changed-file-discovery gap) — see that PR's description for detail.
+
+The automated tests above have now genuinely been run and pass, with dedicated coverage added to distinguish the native bridge path from the CLI-fallback path (previously indistinguishable from a test's perspective, since both can produce an equivalent-looking successful plan). **Ready for Phase 3**, with the caveat that "integration testing" in the original sense planned above (an `integration-tester` QA pass) still never happened as its own discrete activity — the coverage added since is unit/adapter-level, not a full end-to-end QA pass.

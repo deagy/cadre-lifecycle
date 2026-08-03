@@ -5,7 +5,7 @@
 This repository combines two independent systems:
 
 - **Cadre** (role selection): 71 specialist roles, routing rules, orchestration runtime. The source of truth for role definitions lives in the independent [deagy/cadre](https://github.com/deagy/cadre) register. Assets here (`agent-catalog.json`, `profiles/`, `extensions/`, `skills/`, `agents/`, `bin/cadre`) are generated from that register.
-- **Agentic SDLC** (lifecycle governance): G1–G10 gate schemas, run-record validation, gate authority. Vendored here from [deagy/agentic-sdlc](https://github.com/deagy/agentic-sdlc).
+- **Agentic SDLC** (lifecycle governance): G1–G10 gate schemas, run-record validation, gate authority. External dependency, not vendored — the separately installed `agentic-sdlc` CLI from [deagy/agentic-sdlc](https://github.com/deagy/agentic-sdlc), invoked via `bin/cadre sdlc`.
 - **Cline plugin** (`cline/`): hand-authored TypeScript plugin exposing the `agents_select` tool call.
 
 Keep role definitions and `agent-catalog.json` synchronized when adding or changing agents. Regenerate the packaged plugin from the register before review.
@@ -30,7 +30,7 @@ cd cline && npm run typecheck
 For the LangGraph engine:
 
 ```sh
-cd agentic_sdlc_langgraph && python3 -m unittest test_bridge -v
+cd agentic_sdlc_langgraph && python3 -m unittest discover -s . -p "test_*.py" -v
 ```
 
 ## Coding Style & Naming Conventions
@@ -39,7 +39,7 @@ cd agentic_sdlc_langgraph && python3 -m unittest test_bridge -v
 - **TypeScript**: strict TypeScript, two-space indentation, ES modules
 - **Go** (if applicable): `gofmt`, `goimports`, `go vet`, lowercase packages
 
-Prefer the Go libraries and tools in `suite/library-standards.yaml`; pin and justify every added dependency.
+Prefer the Go libraries and tools in `suite/roster/shared/library-standards.yaml`; pin and justify every added dependency.
 
 ## Testing Guidelines
 

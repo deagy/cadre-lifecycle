@@ -199,9 +199,20 @@ class NativeDispatchAdapter(DispatchAdapter):
                     method="native",
                 )
 
-            # Build the input_data dict expected by build_dispatch_plan
+            # Build the input_data dict expected by build_dispatch_plan.
+            # Order-preserving dedup (dict.fromkeys), like select_agents.py's
+            # explicit_files(), so a caller passing duplicate paths gets a
+            # deduped changed_files list through either adapter. Not a byte-
+            # for-byte match: explicit_files() dedupes the raw strings before
+            # backslash normalization happens later in main(), so two paths
+            # differing only by slash style survive as separate entries
+            # there; here dedup runs after normalization, so such a pair
+            # collapses to one. Only matters for backslash-style duplicate
+            # paths, and collapsing is arguably more correct.
             if request.files:
-                changed_files = [f.replace("\\", "/") for f in request.files]
+                changed_files = list(
+                    dict.fromkeys(f.replace("\\", "/") for f in request.files)
+                )
                 changed_file_source = "explicit"
             else:
                 # Try to discover changed files via git
@@ -244,7 +255,7 @@ class NativeDispatchAdapter(DispatchAdapter):
                 method="native",
             )
 
-    def _run_git(self, args: list[str], repository_root: Path) -> str:
+    def _run_git(self, args: list[str], repository_root: Path, timeout: int = 10) -> str:
         # repository_root is caller-controlled (an arbitrary target workspace)
         # and may point at an untrusted checkout; neutralize the
         # config-driven RCE surface (fsmonitor hook, system-wide config,
@@ -264,7 +275,7 @@ class NativeDispatchAdapter(DispatchAdapter):
             text=True,
             encoding="utf-8",
             env=env,
-            timeout=10,
+            timeout=timeout,
         )
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip() or f"git {' '.join(args)} failed")
@@ -338,23 +349,14 @@ class NativeDispatchAdapter(DispatchAdapter):
         import re as _re  # noqa: F811
         from urllib.parse import urlparse as _urlparse  # noqa: F811
 
-        env = dict(os.environ)
-        env["GIT_CONFIG_NOSYSTEM"] = "1"
-        env["GIT_TERMINAL_PROMPT"] = "0"
-
         try:
-            result = subprocess.run(
-                ["git", "-c", "core.fsmonitor=false", "remote", "get-url", "origin"],
-                cwd=str(repository_root),
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                timeout=5,
-            )
-            if result.returncode != 0:
-                return None
-            origin = result.stdout.strip()
+            # Routed through _run_git (not a hand-rolled subprocess.run) so
+            # this gets the same env/flag hardening as every other git call
+            # against a caller-controlled repository_root, including
+            # --no-optional-locks.
+            origin = self._run_git(
+                ["remote", "get-url", "origin"], repository_root, timeout=5
+            ).strip()
             if not origin:
                 return None
             path = _urlparse(origin).path if "://" in origin else origin.split(":", 1)[-1]
@@ -368,7 +370,9 @@ class NativeDispatchAdapter(DispatchAdapter):
                 return None
             slug = f"{owner}/{repository}".lower()
             return slug if _re.fullmatch(r"[a-z0-9._-]+/[a-z0-9._-]+", slug) else None
-        except (subprocess.TimeoutExpired, OSError):
+        except (RuntimeError, subprocess.TimeoutExpired, OSError):
+            # RuntimeError from _run_git covers the common case of no
+            # 'origin' remote configured, not just unexpected failures.
             return None
 
 

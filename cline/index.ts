@@ -117,8 +117,17 @@ import { existsSync } from "node:fs";
 /**
  * Check whether the Python bridge module is available for native invocation.
  * Returns true if bridge.py exists at the expected location.
+ *
+ * CADRE_DISABLE_NATIVE_BRIDGE=1 forces the CLI-fallback path even when the
+ * bridge is present. This exists so the CLI-fallback path (CADRE_BIN
+ * resolution, buildSelectArgs, execFileAsync error mapping) can be exercised
+ * deterministically — bridge.py is vendored in this repo, so it is normally
+ * always available and that path would otherwise never run in this repo's
+ * own test suite — and doubles as a manual escape hatch for diagnosing a
+ * misbehaving native bridge in the field.
  */
 function isBridgeAvailable(): boolean {
+  if (process.env.CADRE_DISABLE_NATIVE_BRIDGE === "1") return false;
   return existsSync(PYTHON_BRIDGE);
 }
 
@@ -219,16 +228,22 @@ function runPythonBridge(
 
     let killTimer: NodeJS.Timeout | undefined;
 
+    // Send SIGTERM, then escalate to SIGKILL if the child ignores it (e.g.
+    // blocked in an uninterruptible syscall) rather than leaving it to
+    // linger forever. Shared by both the overall timeout and the
+    // buffer-overflow guard below, so neither kill path can leak a process.
+    // killTimer is cleared on 'close'/'error' if the child exits before it
+    // fires — otherwise it would outlive a clean exit and could, in the
+    // unlikely event the OS reuses the PID within the window, signal an
+    // unrelated process.
+    function terminateWithEscalation(): void {
+      child.kill("SIGTERM");
+      killTimer = setTimeout(() => child.kill("SIGKILL"), 5_000);
+    }
+
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      // Escalate if the child ignores SIGTERM (e.g. blocked in an
-      // uninterruptible syscall) rather than leaving it to linger forever.
-      // Cleared below on 'close'/'error' if the child exits before this
-      // fires — otherwise it would outlive a clean exit and could, in the
-      // unlikely event the OS reuses the PID within the window, signal an
-      // unrelated process.
-      killTimer = setTimeout(() => child.kill("SIGKILL"), 5_000);
+      terminateWithEscalation();
     }, BRIDGE_TIMEOUT_MS);
 
     child.stdout.setEncoding("utf-8");
@@ -247,7 +262,7 @@ function runPythonBridge(
       stdout += chunk;
       if (stdout.length > BRIDGE_MAX_BUFFER) {
         overflowed = true;
-        child.kill("SIGTERM");
+        terminateWithEscalation();
       }
     });
     child.stderr.on("data", (chunk: string) => {
@@ -337,8 +352,13 @@ async function invokeNativeBridge(
     // whatever partial stdout/stderr had been captured.
     const err = error as { message?: string; stdout?: string; stderr?: string; code?: string };
     if (err.code === "ENOENT") {
+      // invokeNativeBridge is only reached when isBridgeAvailable() already
+      // confirmed PYTHON_BRIDGE exists on disk, so an ENOENT from spawning
+      // it means the *python3* executable itself is missing from PATH, not
+      // that bridge.py is missing — don't misdirect troubleshooting at the
+      // wrong artifact.
       throw new BridgeInvocationError(
-        `Python bridge not found at ${PYTHON_BRIDGE}. Ensure the agentic-sdlc LangGraph engine is installed.`,
+        `python3 not found on PATH while invoking the LangGraph bridge at ${PYTHON_BRIDGE}. Ensure Python 3 is installed and on PATH.`,
         "",
         "",
       );
