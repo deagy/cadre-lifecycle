@@ -18,7 +18,7 @@ Resolve Python 3.10+ as documented in the runbook. From each internal-tool compo
 python3 -B -m unittest discover -s test -p "test_*.py"
 ```
 
-After changing role definitions in the independent register, regenerate assets here (`cadre generate-plugin --output /path/to/cadre-lifecycle`) and re-run repository health checks.
+After changing role definitions in the independent register, regenerate into a scratch directory (`cadre generate-plugin --output /tmp/scratch`, never directly against this repository — its README template describes the separate `deagy/cadre-plugin` repo, not this one), diff against this repository, apply everything except `README.md` (hand-authored here), and re-run repository health checks. See README.md's "Regenerating Assets" for the exact steps.
 
 For the Cline plugin:
 

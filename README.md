@@ -135,7 +135,7 @@ This project combines two independent systems:
 | **Agentic SDLC Kernel** | [deagy/agentic-sdlc](https://github.com/deagy/agentic-sdlc) | Lifecycle gates, run-record validation, gate authority (external dependency, not vendored) |
 | **Cline Plugin** | This repository | `agents_select` tool call for agent dispatch |
 
-The Cadre register remains the source of truth for role definitions. Assets in this repository are generated from the register and can be refreshed by running `cadre generate-plugin` against an independent register checkout.
+The Cadre register remains the source of truth for role definitions. Assets in this repository are generated from the register — see "Regenerating Assets" below for the safe procedure; `cadre generate-plugin --output` cannot be run directly against this repository.
 
 ## Development
 
@@ -151,12 +151,20 @@ cd agentic_sdlc_langgraph && python3 -m unittest discover -s . -p "test_*.py" -v
 
 ### Regenerating Assets
 
-To refresh generated assets from the Cadre register:
+**`cadre generate-plugin --output` is not safe to run directly against this repository.** The register (`deagy/cadre`) split its own downstream plugin distribution out into a separate `deagy/cadre-plugin` repository at some point before this repository's pinned `cadre-ref.txt` revision, and its generator now writes `README.md` from a template (`packaging/plugin-README.md`) that describes *that* repository — a different three-way `cadre`/`cadre-plugin`/`agentic-sdlc` split, with its own versioning and install instructions — not this repository's actual merged Cadre + Agentic SDLC + Cline + LangGraph identity. The register has no concept of `cadre-lifecycle` at all.
+
+Everything else the register generates (`skills/`, `agents/`, `codex-agents/`, `suite/`, `agent-catalog.json`, `bin/cadre`, `profiles/`, `extensions/`) is role/routing content, not repository-identity prose, so it stays correct. `README.md` (despite `cadre-ref.txt` naming a generated-content revision) is treated as **hand-authored here**, the one exception.
+
+To refresh generated assets from the Cadre register safely:
 
 ```sh
 git clone https://github.com/deagy/cadre.git
-cadre/bin/cadre generate-plugin --output /path/to/cadre-lifecycle
+git -C cadre checkout "$(grep -v '^[[:space:]]*#' /path/to/cadre-lifecycle/cadre-ref.txt | grep -v '^[[:space:]]*$' | head -1)"
+cadre/bin/cadre generate-plugin --output /tmp/cadre-lifecycle-regen   # a scratch directory, never this checkout directly
+diff -rq /tmp/cadre-lifecycle-regen /path/to/cadre-lifecycle          # review the diff
 ```
+
+Apply everything **except `README.md`** from that diff, bump `cadre-ref.txt` to the new revision, and re-run repository health checks before committing.
 
 ## Releasing
 

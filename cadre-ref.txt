@@ -2,8 +2,14 @@
 #
 # Everything under skills/, agents/, codex-agents/, suite/, agent-catalog.json
 # and bin/ is produced by that revision's `bin/cadre generate-plugin`.
-# .github/workflows/validate.yml regenerates against exactly this ref and fails
-# on any difference, so the two repositories can never drift silently.
+# Unlike deagy/cadre-plugin (the register's actual downstream distribution
+# target), this repository has no CI enforcing that -- there is no
+# .github/workflows/ here -- so drift against this ref is only caught by
+# whoever runs the regeneration procedure in README.md's "Regenerating
+# Assets" and reviews the diff. Note README.md itself is hand-authored here
+# despite being generated content in deagy/cadre-plugin: the register's
+# README template describes that separate repository, not this one's merged
+# identity, so it is deliberately excluded from regeneration.
 #
 # To pick up register changes: update this ref and commit the regenerated diff
 # in the same pull request.

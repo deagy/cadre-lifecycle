@@ -49,6 +49,6 @@ bin/cadre sdlc --help          # lifecycle operations
 
 ## Working Across Subsystems
 
-Changes to role definitions belong in the independent Cadre register (`deagy/cadre`). Regenerate assets here with `cadre generate-plugin --output /path/to/cadre-lifecycle`.
+Changes to role definitions belong in the independent Cadre register (`deagy/cadre`). Do **not** run `cadre generate-plugin --output` directly against this repository — the register split its downstream distribution into a separate `deagy/cadre-plugin` repo and its README template now describes that repository, not this one's merged identity. Regenerate into a scratch directory instead, diff against this repository, and apply everything except `README.md` (hand-authored here). See README.md's "Regenerating Assets" for the exact steps.
 
 Changes to lifecycle gate semantics or contract shape belong in the external `deagy/agentic-sdlc` repository, not here; this repository only shells out to it via `suite/roster/orchestration/src/agentic_sdlc_contracts.py`. Run the LangGraph engine and Cline plugin test suites before considering cross-cutting work here done.
