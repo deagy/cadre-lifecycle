@@ -13,7 +13,7 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `.claude-plugin/plugin.json` / `.codex-plugin/plugin.json`, checked with
 `python3 tools/plugin_version.py --check`/`--set`.
 
-## [Unreleased]
+## [0.1.1] - 2026-08-03
 
 ### Fixed
 
