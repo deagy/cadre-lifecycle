@@ -13,6 +13,29 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `.claude-plugin/plugin.json` / `.codex-plugin/plugin.json`, checked with
 `python3 tools/plugin_version.py --check`/`--set`.
 
+## [0.1.2] - 2026-08-03
+
+### Fixed
+
+- **`cline plugin install` warned `Cannot find module 'vitest'` on every
+  install.** Cline's plugin installer scans every non-hidden `.js`/`.ts`
+  file under the installed package as a candidate plugin module,
+  including `cline/index.test.ts`. That file imports `vitest`, a
+  `devDependency` the installer's production-only `npm install` never
+  provisions. Renamed to `cline/index.test.mts` — outside the
+  installer's `.js`/`.ts` scan, still discovered and run by `vitest`'s
+  default include glob.
+- **`codex plugin marketplace add` failed with `marketplace 'cadre-team'
+  is already added from a different source`.** `.agents/plugins/
+  marketplace.json` still declared the pre-merge marketplace/plugin
+  names (`cadre-team`/`cadre`) left over from before this repository
+  combined the standalone `cadre` and `agentic-sdlc` repos, colliding
+  with an older, separately-installed `cadre-team` marketplace pointing
+  at the original pre-merge `cadre` repo. Renamed to
+  `cadre-lifecycle-team`/`cadre-lifecycle` to match
+  `.claude-plugin/marketplace.json`, which already used the correct
+  post-merge names.
+
 ## [0.1.1] - 2026-08-03
 
 ### Fixed
