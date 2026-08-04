@@ -11,9 +11,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/). The
 release convention (see `README.md`'s "Releasing" section) ties git tags
 (`vMAJOR.MINOR.PATCH`) to a deliberate, reviewed version bump of
 `.claude-plugin/plugin.json` / `.codex-plugin/plugin.json`, checked with
-`python3 tools/plugin_version.py --check`/`--set`.
+`python3 tools/plugin_version.py --check`/`--set`. Each version heading
+below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
-## [0.2.2] - 2026-08-04
+## [0.2.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.2) - 2026-08-04
 
 ### Fixed
 
@@ -29,7 +30,7 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
   JSON Schema with the plugin's own `zod` before registering it, removing
   the dependency on that cross-realm `instanceof` check.
 
-## [0.2.1] - 2026-08-04
+## [0.2.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.1) - 2026-08-04
 
 ### Fixed
 
@@ -58,7 +59,7 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
   time still unsafe) regeneration command, then verified byte-for-byte
   against this revision's actual generated output before the ref bump.
 
-## [0.2.0] - 2026-08-03
+## [0.2.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.0) - 2026-08-03
 
 ### Added
 
@@ -76,7 +77,7 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
   `deagy/cadre`'s `cadre generate-plugin` on every sync, so a hand-added
   case there would be silently lost on the next regeneration.
 
-## [0.1.2] - 2026-08-03
+## [0.1.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.1.2) - 2026-08-03
 
 ### Fixed
 
@@ -99,7 +100,7 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
   `.claude-plugin/marketplace.json`, which already used the correct
   post-merge names.
 
-## [0.1.1] - 2026-08-03
+## [0.1.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.1.1) - 2026-08-03
 
 ### Fixed
 
@@ -141,7 +142,7 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
   silently reached for a lockfile/`node_modules` there instead of
   `cline/`'s own, on both `npm install` and `npm ci`.
 
-## [0.1.0] - 2026-08-03
+## [0.1.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.1.0) - 2026-08-03
 
 First release from this repository.
 
