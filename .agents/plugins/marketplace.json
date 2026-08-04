@@ -1,11 +1,11 @@
 {
-  "name": "cadre-team",
+  "name": "cadre-lifecycle-team",
   "interface": {
-    "displayName": "Cadre Team"
+    "displayName": "Cadre Lifecycle Team"
   },
   "plugins": [
     {
-      "name": "cadre",
+      "name": "cadre-lifecycle",
       "source": {
         "source": "local",
         "path": "./"
