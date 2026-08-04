@@ -475,8 +475,20 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
         "calling this tool, the orchestrating Cline session must dispatch manually: see the \"## Cline\" " +
         "section of .agents/skills/run-agent-orchestration/references/runner-adapters.md for the current " +
         "manual-injection workaround and /team limitations.",
-      inputSchema: AgentsSelectInputSchema,
-      execute: async (input: AgentsSelectInput): Promise<Record<string, unknown> | AgentsSelectError> => {
+      // Converted to plain JSON Schema with this plugin's own zod, rather than
+      // handed to createTool() as a raw ZodObject. createTool() only converts
+      // a Zod schema on its own via `instanceof ZodType`, and that check runs
+      // against the *host's* bundled zod, not this plugin's. A Cline plugin
+      // runs in a separate installation from its host, so even a
+      // version-matching zod is a different module instance there — the
+      // instanceof check silently fails, the conversion is skipped, and the
+      // raw ZodObject (which has circular internal refs) is passed straight
+      // through as if it were already JSON Schema, breaking serialization of
+      // the tool declaration itself for every call. Converting here removes
+      // the dependency on that cross-realm check entirely.
+      inputSchema: z.toJSONSchema(AgentsSelectInputSchema),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | AgentsSelectError> => {
+        const input = AgentsSelectInputSchema.parse(rawInput);
         if (!rootPath) {
           return {
             error:
