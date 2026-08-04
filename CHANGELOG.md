@@ -1,8 +1,9 @@
 # Changelog
 
-This changelog tracks **consumer-visible** changes to the packaged plugin:
-what installing `cadre@cadre-team` gives you, and how this repository is built
-and released. Changes to the roles, skills, routing, and CLI behaviour
+This changelog tracks **consumer-visible** changes to the packaged plugins:
+what installing `cadre@cadre-lifecycle-team` (and its optional companions)
+gives you, and how this repository is built and released. Changes to the
+roles, skills, routing, and CLI behaviour
 *inside* the package are recorded in the register repository's own changelog
 ([`deagy/cadre`](https://github.com/deagy/cadre/blob/main/CHANGELOG.md)) —
 this file does not restate them.
@@ -13,6 +14,52 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `.claude-plugin/plugin.json` / `.codex-plugin/plugin.json`, checked with
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
+
+## [0.3.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.0) - 2026-08-04
+
+### Changed — breaking
+
+- **Lifecycle governance is no longer bundled into the core plugin — it's
+  now 3 separate, optional plugins, and the core plugin is renamed.** This
+  repository previously shipped one plugin, `cadre-lifecycle`, combining
+  Cadre role selection (71 specialist roles, `agents_select`) with Agentic
+  SDLC lifecycle governance (G1–G10 gates). It now ships 4 independently
+  installable plugins from the same repository:
+  - **`cadre`** (renamed from `cadre-lifecycle`) — role selection only:
+    the catalog, routing, `agents_select` Cline tool, and orchestration
+    skills. No lifecycle governance.
+  - **`cadre-lifecycle-core`** (`plugins/lifecycle/`) — forge-agnostic
+    lifecycle governance: the `lifecycle-onboarding` and `lifecycle-review`
+    skills, plus `plugins/lifecycle/tools/bootstrap_sdlc.py` (moved from
+    `tools/bootstrap_sdlc.py`).
+  - **`cadre-lifecycle-github`** (`plugins/lifecycle-github/`) — a
+    `lifecycle-review-github` skill that records gate decisions from a real
+    GitHub PR review (`approve-from-github`/`approve-from-github-pr`).
+  - **`cadre-lifecycle-gitlab`** (`plugins/lifecycle-gitlab/`) — the GitLab
+    equivalent (`approve-from-gitlab`/`approve-from-gitlab-mr`).
+
+  The marketplace itself is unchanged (`cadre-lifecycle-team`, still at
+  this repository) — only the plugin entries within it changed. All 4
+  plugins share one version number and release together.
+
+  **Migration**: existing `cadre-lifecycle@cadre-lifecycle-team` installs
+  do not automatically become `cadre@cadre-lifecycle-team` — the rename is
+  a new install key. Uninstall the old plugin and run:
+  ```text
+  /plugin install cadre@cadre-lifecycle-team
+  ```
+  and, only if you use lifecycle governance, also install
+  `cadre-lifecycle-core@cadre-lifecycle-team` (plus `-github`/`-gitlab` as
+  needed). See README.md's "Installing" section for the full per-plugin
+  instructions.
+
+### Fixed
+
+- `lifecycle-review`'s GitHub/GitLab `approve-from-*` preference logic
+  moved out to the new forge-specific plugins — the forge-agnostic skill
+  now only ever calls `decide`, and points at the matching
+  `cadre-lifecycle-github`/`cadre-lifecycle-gitlab` plugin instead of
+  trying to cover every forge itself.
 
 ## [0.2.5](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.5) - 2026-08-04
 

@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""Read, check, or set this plugin's release version.
+"""Read, check, or set this repository's release version.
 
-This plugin declares its version independently in two manifests:
-``.claude-plugin/plugin.json`` (Claude Code) and ``.codex-plugin/plugin.json``
-(Codex CLI). Both must always agree, and should track this repository's
-release tags (``vMAJOR.MINOR.PATCH``) one for one. Neither `cadre
-generate-plugin` (run from a deagy/cadre checkout against this one) nor any
-other regeneration step writes this field — it is intentionally hand-set only
-through this tool, so a release is always a deliberate, reviewed action. Both
-manifests are hand-authored package assets, outside the generated tree, so
-setting a version here never conflicts with regeneration.
+This repository packages 4 independently-installable plugins (the core
+role-selection plugin at the repository root, plus 3 optional lifecycle-
+governance plugins under plugins/), each declaring its version in its own
+pair of manifests: ``.claude-plugin/plugin.json`` (Claude Code) and
+``.codex-plugin/plugin.json`` (Codex CLI) -- 8 manifests total. All 8 must
+always agree, and should track this repository's release tags
+(``vMAJOR.MINOR.PATCH``) one for one; a release bumps every plugin together,
+even if only one actually changed. Neither `cadre generate-plugin` (run from
+a deagy/cadre checkout against this one) nor any other regeneration step
+writes this field — it is intentionally hand-set only through this tool, so a
+release is always a deliberate, reviewed action. All 8 manifests are
+hand-authored package assets, outside the generated tree, so setting a
+version here never conflicts with regeneration.
 
     python3 tools/plugin_version.py            # print the current, verified version
     python3 tools/plugin_version.py --check    # exit non-zero if unset/mismatched/invalid
-    python3 tools/plugin_version.py --set 0.3.0  # write a new version into both manifests
+    python3 tools/plugin_version.py --set 0.3.0  # write a new version into all 8 manifests
 
 This does not create a git tag or push anything; see the "Releasing" section
 of README.md for the full release flow. `.github/workflows/release.yml` tags
@@ -28,12 +32,26 @@ import re
 import sys
 from pathlib import Path
 
-# This repository's root *is* the plugin package root.
+# This repository's root *is* the core plugin's package root.
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 
+# This repository hosts 4 independently-installable plugins (see
+# plugins/*/README or README.md's "Installing" section): the core
+# role-selection plugin at the repository root, plus three optional
+# lifecycle-governance plugins under plugins/. They share one version number
+# across all 8 manifests -- a release bumps every plugin together, even if
+# only one actually changed -- so this stays a flat dict rather than a
+# per-plugin grouping; check_versions()/set_version() below need no
+# structural change to cover the extra manifests.
 MANIFESTS = {
     "claude": PLUGIN_ROOT / ".claude-plugin" / "plugin.json",
     "codex": PLUGIN_ROOT / ".codex-plugin" / "plugin.json",
+    "lifecycle-claude": PLUGIN_ROOT / "plugins" / "lifecycle" / ".claude-plugin" / "plugin.json",
+    "lifecycle-codex": PLUGIN_ROOT / "plugins" / "lifecycle" / ".codex-plugin" / "plugin.json",
+    "lifecycle-github-claude": PLUGIN_ROOT / "plugins" / "lifecycle-github" / ".claude-plugin" / "plugin.json",
+    "lifecycle-github-codex": PLUGIN_ROOT / "plugins" / "lifecycle-github" / ".codex-plugin" / "plugin.json",
+    "lifecycle-gitlab-claude": PLUGIN_ROOT / "plugins" / "lifecycle-gitlab" / ".claude-plugin" / "plugin.json",
+    "lifecycle-gitlab-codex": PLUGIN_ROOT / "plugins" / "lifecycle-gitlab" / ".codex-plugin" / "plugin.json",
 }
 
 SEMVER_PATTERN = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
@@ -113,7 +131,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--check", action="store_true", help="verify the manifests agree on a valid semver version")
-    group.add_argument("--set", metavar="VERSION", help="write VERSION (MAJOR.MINOR.PATCH) into both manifests")
+    group.add_argument("--set", metavar="VERSION", help="write VERSION (MAJOR.MINOR.PATCH) into all 8 manifests")
     arguments = parser.parse_args()
 
     if arguments.set is not None:

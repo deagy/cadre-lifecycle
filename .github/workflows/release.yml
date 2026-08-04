@@ -6,12 +6,13 @@ name: Release
 # now real.
 #
 # A "version bump" is defined operationally, not just by these paths
-# triggering: both plugin manifests must agree on a valid semver (checked
-# below) and there must be no existing `v<version>` tag yet (also checked
-# below). That second check is what makes this workflow idempotent -- a
-# re-run, a push that touches these files without actually changing the
-# version, or a manually-created tag/Release for the same version all become
-# safe no-ops instead of a duplicate or failing run.
+# triggering: all 8 plugin manifests (4 plugins, see tools/plugin_version.py)
+# must agree on a valid semver (checked below) and there must be no existing
+# `v<version>` tag yet (also checked below). That second check is what makes
+# this workflow idempotent -- a re-run, a push that touches these files
+# without actually changing the version, or a manually-created tag/Release
+# for the same version all become safe no-ops instead of a duplicate or
+# failing run.
 #
 # Once this lands, do not tag or create the Release by hand for a version
 # bump pushed to main -- this workflow will do it. Manual tagging is still
@@ -23,6 +24,12 @@ on:
     paths:
       - ".claude-plugin/plugin.json"
       - ".codex-plugin/plugin.json"
+      - "plugins/lifecycle/.claude-plugin/plugin.json"
+      - "plugins/lifecycle/.codex-plugin/plugin.json"
+      - "plugins/lifecycle-github/.claude-plugin/plugin.json"
+      - "plugins/lifecycle-github/.codex-plugin/plugin.json"
+      - "plugins/lifecycle-gitlab/.claude-plugin/plugin.json"
+      - "plugins/lifecycle-gitlab/.codex-plugin/plugin.json"
 
 permissions:
   contents: write

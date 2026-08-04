@@ -1,0 +1,14 @@
+{
+  "name": "cadre-lifecycle-gitlab",
+  "displayName": "Cadre Lifecycle (GitLab)",
+  "version": "0.3.0",
+  "description": "GitLab-flavored Agentic SDLC gate-approval recording: a conversational skill that records lifecycle gate decisions from a real GitLab MR approval via approve-from-gitlab/approve-from-gitlab-mr. Requires cadre-lifecycle-core to also be installed. If you don't have a GitLab approval to cite, cadre-lifecycle-core's generic lifecycle-review skill covers that case.",
+  "author": {
+    "name": "Cadre maintainers",
+    "url": "https://github.com/deagy/cadre-lifecycle"
+  },
+  "homepage": "https://github.com/deagy/cadre-lifecycle",
+  "repository": "https://github.com/deagy/cadre-lifecycle",
+  "keywords": ["cadre", "lifecycle-governance", "agentic-sdlc", "gitlab"],
+  "skills": "./skills/"
+}

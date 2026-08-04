@@ -1,7 +1,14 @@
 # The deagy/cadre revision this repository's generated content corresponds to.
 #
-# Everything under skills/, agents/, codex-agents/, suite/, agent-catalog.json
-# and bin/ is produced by that revision's `bin/cadre generate-plugin`.
+# Everything under skills/, agents/, codex-agents/, suite/, agent-catalog.json,
+# bin/, and plugins/lifecycle/skills/ is produced by that revision's
+# `bin/cadre generate-plugin`. plugins/lifecycle/skills/ is the one nested
+# exception: lifecycle-onboarding/lifecycle-review generate there instead of
+# root skills/ (see SKILL_PACKAGE_TARGETS in the register's
+# generate_global_plugin.py) so cadre-lifecycle can package them as part of
+# the optional cadre-lifecycle-core plugin. plugins/lifecycle/'s own
+# manifests and tools/, and plugins/lifecycle-github/, plugins/lifecycle-
+# gitlab/ entirely, are hand-authored here, like README.md below.
 # Unlike deagy/cadre-plugin (the register's actual downstream distribution
 # target), this repository has no CI enforcing that -- .github/workflows/
 # here only tags and publishes releases (see release.yml), it does not check
@@ -14,4 +21,4 @@
 #
 # To pick up register changes: update this ref and commit the regenerated diff
 # in the same pull request.
-8511c759b7b3f784dd28383c1ac95a128b4dcc84
+d89055035f991686c56194b79c3ab49785d5138b

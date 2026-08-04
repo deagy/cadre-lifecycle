@@ -19,10 +19,10 @@ there would be silently deleted on the next sync. `tools/` is not part of
 that generated set (see `tools/plugin_version.py`, the existing precedent
 for a hand-authored script invoked directly rather than through `bin/cadre`).
 
-    python3 tools/bootstrap_sdlc.py                       # install (if needed) + configure this project
-    python3 tools/bootstrap_sdlc.py --dry-run              # report what would happen, change nothing
-    python3 tools/bootstrap_sdlc.py --skip-init             # install/verify the kernel only
-    python3 tools/bootstrap_sdlc.py --root /path/to/project --profile secure-cloud
+    python3 plugins/lifecycle/tools/bootstrap_sdlc.py                       # install (if needed) + configure this project
+    python3 plugins/lifecycle/tools/bootstrap_sdlc.py --dry-run              # report what would happen, change nothing
+    python3 plugins/lifecycle/tools/bootstrap_sdlc.py --skip-init             # install/verify the kernel only
+    python3 plugins/lifecycle/tools/bootstrap_sdlc.py --root /path/to/project --profile secure-cloud
 
 Never reinstalls over an existing `agentic-sdlc` the human already has on
 `PATH` or pointed at via `AGENTIC_SDLC_BIN`, even if its version falls
@@ -43,10 +43,14 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-# This repository's root *is* the plugin package root (same convention as
-# tools/plugin_version.py).
-PLUGIN_ROOT = Path(__file__).resolve().parent.parent
-PROVIDER_MANIFEST_PATH = PLUGIN_ROOT / "provider.json"
+# This script lives in the cadre-lifecycle-core sub-plugin
+# (plugins/lifecycle/tools/), two levels below the repository root, but
+# provider.json itself is core-plugin content and stays at the repository
+# root (see cadre-ref.txt) -- referenced here by relative path rather than
+# duplicated, the same convention this repository's skills already use for
+# reaching root-level shared content.
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+PROVIDER_MANIFEST_PATH = REPO_ROOT / "provider.json"
 
 AGENTIC_SDLC_GIT_URL = "https://github.com/deagy/agentic-sdlc.git"
 AGENTIC_SDLC_SUBDIRECTORY = "plugins/agentic-sdlc"

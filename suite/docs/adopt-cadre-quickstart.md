@@ -79,7 +79,7 @@ infers approval, risk acceptance, or compliance applicability for you.
 If you'd rather not touch a CLI, JSON, or YAML at all, ask an agent in your
 project to run the `lifecycle-onboarding` skill instead — it drives this same
 flow (and the optional shared-policy overlay in step 4) conversationally. See
-[.agents/skills/lifecycle-onboarding/SKILL.md](../../skills/lifecycle-onboarding/SKILL.md).
+[.agents/skills/lifecycle-onboarding/SKILL.md](../../plugins/lifecycle/skills/lifecycle-onboarding/SKILL.md).
 
 Validate once you've made the required decisions:
 

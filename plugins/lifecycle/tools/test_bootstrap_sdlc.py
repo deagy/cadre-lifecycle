@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for tools/bootstrap_sdlc.py.
+"""Tests for plugins/lifecycle/tools/bootstrap_sdlc.py.
 
 Covers the decision logic around whether to install, reuse, or refuse an
 existing `agentic-sdlc` binary, and that the `init` command it builds matches
@@ -8,7 +8,7 @@ what `bin/cadre sdlc` itself would invoke. Subprocess calls (`pipx`,
 `bootstrap_sdlc._run` so these tests never touch the network or a real
 install.
 
-    python3 -m unittest discover -s tools -p "test_*.py"
+    python3 -m unittest discover -s plugins/lifecycle/tools -p "test_*.py"
 """
 
 from __future__ import annotations

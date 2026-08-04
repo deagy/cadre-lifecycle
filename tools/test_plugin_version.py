@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Tests for tools/plugin_version.py.
 
-`set_version()` writes the release version into two independent manifests
-(`.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`) that must never
-disagree: Claude Code reads one, Codex CLI the other, and a version bump
-landing on `main` is what triggers release.yml. A partial write would publish a
-package advertising two different versions of itself.
+`set_version()` writes the release version into every one of this
+repository's 8 plugin manifests (4 plugins x `.claude-plugin/plugin.json` +
+`.codex-plugin/plugin.json`) that must never disagree: a partial write would
+publish some plugins advertising a different version of the repository than
+others, and a version bump landing on `main` is what triggers release.yml.
 
-Nothing else can catch that. Both manifests are hand-authored package assets,
-deliberately excluded from `cadre generate-plugin`'s generated set, so the
-register's drift check never inspects them -- see generate_global_plugin.py's
-PACKAGE_ASSETS. This file is the only guard.
+Nothing else can catch that. All 8 manifests are hand-authored package
+assets, deliberately excluded from `cadre generate-plugin`'s generated set,
+so the register's drift check never inspects them -- see
+generate_global_plugin.py's PACKAGE_ASSETS. This file is the only guard.
 
     python3 -m unittest discover -s tools -p "test_*.py"
 """
@@ -87,21 +87,26 @@ class CheckVersionsTests(unittest.TestCase):
     def test_this_repositorys_own_manifests_agree_on_a_valid_version(self) -> None:
         self.assertEqual([], plugin_version.check_versions())
         versions = plugin_version.read_versions()
-        self.assertRegex(versions["claude"], r"^\d+\.\d+\.\d+$")
-        self.assertEqual(versions["claude"], versions["codex"])
+        self.assertEqual(8, len(versions), "expected 4 plugins x 2 manifests each")
+        distinct = set(versions.values())
+        self.assertEqual(1, len(distinct), versions)
+        self.assertRegex(next(iter(distinct)), r"^\d+\.\d+\.\d+$")
 
     def test_advertised_role_count_matches_the_packaged_catalog(self) -> None:
-        """Both manifests advertise a role count in their `description`. The
-        register's generator copies that prose faithfully, so a stale number
-        passes every drift check -- only a comparison against the catalog
-        itself catches it.
+        """The core plugin's two manifests advertise a role count in their
+        `description`. The register's generator copies that prose faithfully,
+        so a stale number passes every drift check -- only a comparison
+        against the catalog itself catches it. The 3 lifecycle plugins don't
+        describe the role catalog at all, so they're intentionally excluded
+        here rather than made to say something that isn't true of them.
         """
         import re
 
         package_root = Path(__file__).resolve().parent.parent
         catalog = json.loads((package_root / "agent-catalog.json").read_text(encoding="utf-8"))
         expected = len(catalog["agents"])
-        for name, path in plugin_version.MANIFESTS.items():
+        for name in ("claude", "codex"):
+            path = plugin_version.MANIFESTS[name]
             with self.subTest(manifest=name):
                 advertised = {
                     int(value)

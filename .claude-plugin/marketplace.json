@@ -5,8 +5,20 @@
   },
   "plugins": [
     {
-      "name": "cadre-lifecycle",
+      "name": "cadre",
       "source": "./"
+    },
+    {
+      "name": "cadre-lifecycle-core",
+      "source": "./plugins/lifecycle"
+    },
+    {
+      "name": "cadre-lifecycle-github",
+      "source": "./plugins/lifecycle-github"
+    },
+    {
+      "name": "cadre-lifecycle-gitlab",
+      "source": "./plugins/lifecycle-gitlab"
     }
   ]
 }
