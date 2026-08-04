@@ -15,6 +15,35 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.3.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.1) - 2026-08-04
+
+### Added
+
+- **`cadre-lifecycle-gitlab` gains a second skill, `gitlab-gate-tracking`**,
+  the opposite direction from `lifecycle-review-gitlab`: instead of reading
+  an existing GitLab MR approval back into the kernel, it publishes a GitLab
+  tracking issue per applicable lifecycle gate, plus a linked "approval"
+  issue per gate per required authority role, assigned to that authority's
+  real GitLab account (resolved via the kernel's existing
+  `authority_gitlab_username()`). Drives the new kernel commands
+  `agentic-sdlc create-gate-issues`/`list-gate-issues` — see
+  [`deagy/agentic-sdlc`'s changelog](https://github.com/deagy/agentic-sdlc/blob/main/CHANGELOG.md)
+  for the kernel-side implementation, which was independently
+  security-reviewed and code-reviewed before landing. The skill is
+  dry-run-first by design and refuses to `--apply` without the human
+  explicitly confirming the shown assignments — creating an issue and
+  assigning a real person is treated as a mutation requiring human
+  confirmation, the same as any other consequential action in this suite.
+
+  **Caveat**: this requires an `agentic-sdlc` kernel build containing
+  `create-gate-issues` (merged upstream at
+  [`deagy/agentic-sdlc@e798d4f`](https://github.com/deagy/agentic-sdlc/commit/e798d4f)).
+  At the time of this release, that commit has not yet been cut into a
+  tagged `agentic-sdlc` release — `provider.json`'s `kernel_compatibility`
+  range (`>=0.3.0,<0.4.0`) does not by itself guarantee an installed kernel
+  has this command; the skill's own "Before you start" step checks for it
+  and tells the human plainly if it's missing, rather than assuming.
+
 ## [0.3.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.0) - 2026-08-04
 
 ### Changed — breaking

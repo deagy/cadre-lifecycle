@@ -1,7 +1,7 @@
 {
   "name": "cadre-lifecycle-gitlab",
-  "version": "0.3.0",
-  "description": "GitLab-flavored Agentic SDLC gate-approval recording: a conversational skill that records lifecycle gate decisions from a real GitLab MR approval via approve-from-gitlab/approve-from-gitlab-mr. Requires cadre-lifecycle-core to also be installed. If you don't have a GitLab approval to cite, cadre-lifecycle-core's generic lifecycle-review skill covers that case.",
+  "version": "0.3.1",
+  "description": "GitLab-flavored Agentic SDLC gate governance: lifecycle-review-gitlab records gate decisions from a real GitLab MR approval (approve-from-gitlab/approve-from-gitlab-mr); gitlab-gate-tracking publishes GitLab tracking issues for a task's gates and assigns linked approval-subtask issues to each gate's authority (create-gate-issues/list-gate-issues). Requires cadre-lifecycle-core to also be installed and a recent-enough agentic-sdlc kernel.",
   "author": {
     "name": "Cadre maintainers",
     "url": "https://github.com/deagy/cadre-lifecycle"
@@ -12,13 +12,14 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Cadre Lifecycle (GitLab)",
-    "shortDescription": "Record Agentic SDLC gate decisions from a real GitLab MR approval.",
-    "longDescription": "Conversationally record a lifecycle gate decision sourced from an actual GitLab merge request approval, via approve-from-gitlab/approve-from-gitlab-mr. Requires cadre-lifecycle-core.",
+    "shortDescription": "Record Agentic SDLC gate decisions and publish gate/approval tracking issues in GitLab.",
+    "longDescription": "Conversationally record a lifecycle gate decision sourced from an actual GitLab merge request approval (approve-from-gitlab/approve-from-gitlab-mr), or publish GitLab tracking issues for a task's gates with linked approval subtasks assigned to each gate's authority (create-gate-issues/list-gate-issues). Requires cadre-lifecycle-core.",
     "developerName": "Cadre maintainers",
     "category": "Productivity",
     "capabilities": ["Interactive", "Write"],
     "defaultPrompt": [
-      "Use lifecycle-review-gitlab to record a gate decision from a GitLab MR approval."
+      "Use lifecycle-review-gitlab to record a gate decision from a GitLab MR approval.",
+      "Use gitlab-gate-tracking to publish GitLab issues for this task's gates and approvals."
     ]
   }
 }
