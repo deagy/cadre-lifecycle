@@ -15,6 +15,18 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.5.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.5.0) - 2026-08-04
+
+### Added
+
+Three more skills, from a second recommendation round that reviewed what shipped in `v0.4.0`. Requires `agentic-sdlc` [v0.12.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.12.0) or later — same caveat pattern as prior releases: `provider.json`'s `kernel_compatibility` range does not by itself guarantee an installed kernel has these commands.
+
+- **`create-github-gate-issues`** (`cadre-lifecycle-github`) — GitHub mirror of `gitlab-gate-tracking`: publishes a tracking issue per gate plus assigned approval-subtask issues per authority. Deliberately scoped narrower than the GitLab original — no issue-linking enhancement (GitHub has no clean equivalent to GitLab's Issue Links API; only the description cross-reference floor exists), and a new repository-visibility pre-flight (`--allow-public-repo` required for public repos) since GitHub issues have no per-issue confidentiality flag.
+- **`publish-reviewer-nudge-github`** (`cadre-lifecycle-github`) — posts an advisory PR comment listing who should be asked to review, sourced from `report-gate-reviewers-github`'s existing candidate report. Explicitly not a review request: logins are rendered as `` `code spans` ``, never `@`-mentions, so posting the comment cannot itself notify anyone. This sidesteps the still-unbuilt write-capable reviewer-request path (`Pull requests: write` has no narrower scope and still needs an explicit human decision that was never made) by reusing `publish-gate-status-github`'s already-approved comment-write capability instead.
+- **`report-gate-reviewers-gitlab`** (`cadre-lifecycle-gitlab`) — GitLab reviewer-candidate reporting, read-only, targeting the MR `reviewer_ids` field rather than GitLab's heavier, quorum-based approval-rules model. GitLab's approval API exposes no per-approver commit SHA, so there is no equivalent of GitHub's `review-stale` classification — a documented, permanent gap, not a placeholder; the report surfaces the MR's head SHA for manual cross-checking instead.
+
+All three independently security- and code-reviewed (no critical/high findings) before landing.
+
 ## [0.4.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.4.0) - 2026-08-04
 
 ### Added
