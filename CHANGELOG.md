@@ -14,6 +14,18 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.2.3](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.3) - 2026-08-04
+
+### Added
+
+- **GitHub Release links in README.md and CHANGELOG.md.** `v0.1.0` through
+  `v0.2.2` had git tags with no corresponding GitHub Release pages, so the
+  release history wasn't browsable from GitHub's UI. Backfilled a Release
+  for each existing tag (title, notes from this file's matching entry), and
+  linked them: README's "Releasing" section now links the full Releases
+  page plus each version, and each version heading in this file links to
+  its own Release.
+
 ## [0.2.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.2) - 2026-08-04
 
 ### Fixed

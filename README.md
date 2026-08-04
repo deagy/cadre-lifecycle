@@ -176,6 +176,7 @@ python3 tools/plugin_version.py --set 0.1.0
 
 See [Releases](https://github.com/deagy/cadre-lifecycle/releases) for the full history, or jump to a specific version:
 
+- [v0.2.3](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.3) — Link GitHub Releases from README.md and CHANGELOG.md
 - [v0.2.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.2) — Fix `agents_select` tool declaration breaking on every call in real Cline hosts
 - [v0.2.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.1) — Fix unsafe `cadre generate-plugin --output` guidance
 - [v0.2.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.0) — Add `tools/bootstrap_sdlc.py` for one-command kernel install
