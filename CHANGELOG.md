@@ -15,6 +15,20 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.4.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.4.0) - 2026-08-04
+
+### Added
+
+Six new skills across the two forge plugins, following a recommendation review of what `cadre-lifecycle-github`/`cadre-lifecycle-gitlab` were missing relative to each other and to the underlying kernel's actual command surface. All drive new kernel commands in [`agentic-sdlc` v0.11.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.11.0) — `cadre-lifecycle-core` requires that version or later for these to work; `provider.json`'s `kernel_compatibility` range does not by itself guarantee it (same caveat pattern as `v0.3.1`/`v0.3.2`).
+
+- **`link-source-issue-github` / `link-source-issue-gitlab`** (`cadre-lifecycle-github`/`cadre-lifecycle-gitlab`) — record a GitHub or GitLab issue as the source for a G1 (Intent) or G2 (Requirements Baseline) gate, via the kernel's `link-intent-from-<forge>-issue`/`link-requirements-from-<forge>-issue`. GitLab already had this kernel-side; GitHub didn't. Neither forge had a conversational skill wrapper for it before now. Deliberately not approval evidence — never touches `human_approvals`/`gate.status`.
+- **`publish-gate-status-github` / `publish-gate-status-gitlab`** (`cadre-lifecycle-github`/`cadre-lifecycle-gitlab`) — publish a one-way, read-only gate-status summary comment on a task's PR/MR, updated in place on re-run, via the kernel's `publish-gate-status`. Carries a mandatory non-approval advisory; never derived from anything the kernel itself doesn't already track, and the underlying command was independently security- and code-reviewed before this skill was built on top of it.
+- **`report-gate-reviewers-github`** (`cadre-lifecycle-github`) — reports which GitHub logins would be requested as PR reviewers for a task's gates, and their current status, via the kernel's `request-gate-reviewers`. **Read-only in this version** — it never actually requests a review. GitHub has no token scope narrower than `Pull requests: write` for that (which also permits editing/closing PRs and changing labels), and shipping the write-capable version needs an explicit decision on that permission escalation, not an inferred one. This skill is explicit about that limitation rather than implying more capability than exists.
+
+### Changed
+
+- `cadre-lifecycle-core`'s `lifecycle-onboarding` skill now preflight-checks a GitHub/GitLab identity's *shape* (explicit field, or well-formed `gitlab.com/`/`github.com/` URI) as soon as a human provides it for an authority role, instead of only surfacing a binding problem later, the first time a forge-write skill actually runs. Explicitly documented as a shape check only, not live account-existence verification — no kernel command exposes that today, and the skill says so rather than overclaiming.
+
 ## [0.3.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.2) - 2026-08-04
 
 ### Fixed

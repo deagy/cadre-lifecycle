@@ -1,7 +1,7 @@
 {
   "name": "cadre-lifecycle-gitlab",
-  "version": "0.3.2",
-  "description": "GitLab-flavored Agentic SDLC gate governance: lifecycle-review-gitlab records gate decisions from a real GitLab MR approval (approve-from-gitlab/approve-from-gitlab-mr); gitlab-gate-tracking publishes GitLab tracking issues for a task's gates and assigns linked approval-subtask issues to each gate's authority (create-gate-issues/list-gate-issues). Requires cadre-lifecycle-core to also be installed and a recent-enough agentic-sdlc kernel.",
+  "version": "0.4.0",
+  "description": "GitLab-flavored Agentic SDLC gate governance: lifecycle-review-gitlab records gate decisions from a real GitLab MR approval (approve-from-gitlab/approve-from-gitlab-mr); gitlab-gate-tracking publishes GitLab tracking issues for a task's gates and assigns linked approval-subtask issues to each gate's authority (create-gate-issues/list-gate-issues); link-source-issue-gitlab records a real GitLab issue as the recorded source for a task's G1 (Intent) or G2 (Requirements Baseline) gate (link-intent-from-gitlab-issue/link-requirements-from-gitlab-issue); publish-gate-status-gitlab posts (and idempotently updates) a one-way, read-only gate-status summary note on a task's GitLab MR (publish-gate-status/list-gate-status). Requires cadre-lifecycle-core to also be installed and a recent-enough agentic-sdlc kernel.",
   "author": {
     "name": "Cadre maintainers",
     "url": "https://github.com/deagy/cadre-lifecycle"
@@ -13,13 +13,15 @@
   "interface": {
     "displayName": "Cadre Lifecycle (GitLab)",
     "shortDescription": "Record Agentic SDLC gate decisions and publish gate/approval tracking issues in GitLab.",
-    "longDescription": "Conversationally record a lifecycle gate decision sourced from an actual GitLab merge request approval (approve-from-gitlab/approve-from-gitlab-mr), or publish GitLab tracking issues for a task's gates with linked approval subtasks assigned to each gate's authority (create-gate-issues/list-gate-issues). Requires cadre-lifecycle-core.",
+    "longDescription": "Conversationally record a lifecycle gate decision sourced from an actual GitLab merge request approval (approve-from-gitlab/approve-from-gitlab-mr), publish GitLab tracking issues for a task's gates with linked approval subtasks assigned to each gate's authority (create-gate-issues/list-gate-issues), record a real GitLab issue as the recorded source for a task's G1 (Intent) or G2 (Requirements Baseline) gate (link-intent-from-gitlab-issue/link-requirements-from-gitlab-issue), or post (and idempotently update) a one-way, read-only gate-status summary note on a task's GitLab MR (publish-gate-status/list-gate-status). Requires cadre-lifecycle-core.",
     "developerName": "Cadre maintainers",
     "category": "Productivity",
     "capabilities": ["Interactive", "Write"],
     "defaultPrompt": [
       "Use lifecycle-review-gitlab to record a gate decision from a GitLab MR approval.",
-      "Use gitlab-gate-tracking to publish GitLab issues for this task's gates and approvals."
+      "Use gitlab-gate-tracking to publish GitLab issues for this task's gates and approvals.",
+      "Use link-source-issue-gitlab to record a GitLab issue as the source for a task's G1 or G2 gate.",
+      "Use publish-gate-status-gitlab to post or refresh a one-way, read-only gate-status summary note on this task's GitLab MR."
     ]
   }
 }
