@@ -8,3 +8,6 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Local knowledge-store runtime state (config + embeddings db)
+.agents/knowledge-store/
