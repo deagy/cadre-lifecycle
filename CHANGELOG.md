@@ -13,6 +13,35 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `.claude-plugin/plugin.json` / `.codex-plugin/plugin.json`, checked with
 `python3 tools/plugin_version.py --check`/`--set`.
 
+## [0.2.1] - 2026-08-04
+
+### Fixed
+
+- **`cadre generate-plugin --output` was unsafe to run directly against this
+  repository.** `deagy/cadre` split its downstream plugin distribution into
+  a separate `deagy/cadre-plugin` repository before this repository's
+  previously-pinned `cadre-ref.txt` revision, and the register's `README.md`
+  template describes that repository — a different three-way
+  `cadre`/`cadre-plugin`/`agentic-sdlc` split with its own versioning — not
+  this repository's merged Cadre + Agentic SDLC + Cline + LangGraph
+  identity. `CLAUDE.md`, `AGENTS.md`, and `README.md` previously instructed
+  running that command directly, which would have silently overwritten
+  `README.md` with the wrong content. Corrected all three to document the
+  actual safe procedure (regenerate into a scratch directory, diff, apply
+  everything except `README.md`, which is now explicitly hand-authored
+  here) and fixed `cadre-ref.txt`'s claim of CI enforcement that doesn't
+  exist in this repository.
+
+### Changed
+
+- **`cadre-ref.txt` bumped to `8511c75`** to pick up
+  `run-agent-orchestration`'s broadened proactive trigger (see
+  [`deagy/cadre`'s changelog](https://github.com/deagy/cadre/blob/main/CHANGELOG.md)
+  for the trigger-description change itself). Applied by hand to
+  `skills/run-agent-orchestration/SKILL.md` rather than through the (at the
+  time still unsafe) regeneration command, then verified byte-for-byte
+  against this revision's actual generated output before the ref bump.
+
 ## [0.2.0] - 2026-08-03
 
 ### Added
