@@ -64,7 +64,7 @@ cline doctor fix
 Add this as a marketplace plugin (pin to a release tag):
 
 ```text
-/plugin marketplace add deagy/cadre-lifecycle@v0.2.4
+/plugin marketplace add deagy/cadre-lifecycle@v0.2.5
 /plugin install cadre-lifecycle@cadre-team
 ```
 
@@ -73,7 +73,7 @@ Add this as a marketplace plugin (pin to a release tag):
 Clone at the tag first, then install:
 
 ```sh
-git clone --branch v0.2.4 https://github.com/deagy/cadre-lifecycle.git
+git clone --branch v0.2.5 https://github.com/deagy/cadre-lifecycle.git
 codex plugin marketplace add /path/to/cadre-lifecycle
 codex plugin add cadre-lifecycle@cadre-team
 ```
@@ -174,8 +174,11 @@ Version lives in both plugin manifests (`.claude-plugin/plugin.json` and `.codex
 python3 tools/plugin_version.py --set 0.1.0
 ```
 
+Pushing that bump to `main` triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which tags the commit (`vMAJOR.MINOR.PATCH`) and publishes a GitHub Release with that version's `CHANGELOG.md` entry as its notes. Don't tag or create the Release by hand for a version bump landing on `main` — the workflow does it (and is idempotent: it checks whether the tag already exists before doing anything, so a re-run or an accidental manual tag is a safe no-op, not a duplicate).
+
 See [Releases](https://github.com/deagy/cadre-lifecycle/releases) for the full history, or jump to a specific version:
 
+- [v0.2.5](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.5) — Add `.github/workflows/release.yml` to auto-tag and auto-publish on a version bump
 - [v0.2.4](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.4) — Fix stale v0.1.0 install pins in Claude Code / Codex CLI instructions
 - [v0.2.3](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.3) — Link GitHub Releases from README.md and CHANGELOG.md
 - [v0.2.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.2) — Fix `agents_select` tool declaration breaking on every call in real Cline hosts

@@ -14,6 +14,29 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.2.5](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.5) - 2026-08-04
+
+### Added
+
+- **`.github/workflows/release.yml`.** `tools/plugin_version.py`'s docstring
+  and README's "Releasing" section already described a version bump landing
+  on `main` as automatically tagging and publishing a GitHub Release — that
+  workflow didn't actually exist until now. It verifies both plugin
+  manifests agree on a valid semver, skips (idempotently) if `v<version>` is
+  already tagged, then tags the commit and creates a GitHub Release titled
+  `v<version>` with that version's `CHANGELOG.md` entry as its notes,
+  extracted by the new `tools/changelog_entry.py` (and its test suite,
+  `tools/test_changelog_entry.py`). Manual `git tag`/`gh release create` is
+  no longer the release step for a version bump reaching `main` — this
+  workflow's own release (`v0.2.5`) is the first to be cut by it rather than
+  by hand, proving it end-to-end.
+
+### Changed
+
+- README's Claude Code and Codex CLI install pins re-pointed from `v0.2.4`
+  to `v0.2.5`, this release itself (same reasoning as `v0.2.4`'s own fix:
+  pin to the version this change ships as, not the previous latest).
+
 ## [0.2.4](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.4) - 2026-08-04
 
 ### Fixed

@@ -3,10 +3,11 @@
 # Everything under skills/, agents/, codex-agents/, suite/, agent-catalog.json
 # and bin/ is produced by that revision's `bin/cadre generate-plugin`.
 # Unlike deagy/cadre-plugin (the register's actual downstream distribution
-# target), this repository has no CI enforcing that -- there is no
-# .github/workflows/ here -- so drift against this ref is only caught by
-# whoever runs the regeneration procedure in README.md's "Regenerating
-# Assets" and reviews the diff. Note README.md itself is hand-authored here
+# target), this repository has no CI enforcing that -- .github/workflows/
+# here only tags and publishes releases (see release.yml), it does not check
+# generated content against this ref -- so drift against this ref is only
+# caught by whoever runs the regeneration procedure in README.md's
+# "Regenerating Assets" and reviews the diff. Note README.md itself is hand-authored here
 # despite being generated content in deagy/cadre-plugin: the register's
 # README template describes that separate repository, not this one's merged
 # identity, so it is deliberately excluded from regeneration.
