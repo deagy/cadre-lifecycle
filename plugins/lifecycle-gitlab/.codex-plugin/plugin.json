@@ -1,6 +1,6 @@
 {
   "name": "cadre-lifecycle-gitlab",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "GitLab-flavored Agentic SDLC gate governance: lifecycle-review-gitlab records gate decisions from a real GitLab MR approval (approve-from-gitlab/approve-from-gitlab-mr); gitlab-gate-tracking publishes GitLab tracking issues for a task's gates and assigns linked approval-subtask issues to each gate's authority (create-gate-issues/list-gate-issues). Requires cadre-lifecycle-core to also be installed and a recent-enough agentic-sdlc kernel.",
   "author": {
     "name": "Cadre maintainers",

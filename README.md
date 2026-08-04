@@ -73,7 +73,7 @@ cline doctor fix
 Add this repository as a marketplace once (pin to a release tag), then install whichever plugins you want:
 
 ```text
-/plugin marketplace add deagy/cadre-lifecycle@v0.3.1
+/plugin marketplace add deagy/cadre-lifecycle@v0.3.2
 /plugin install cadre@cadre-lifecycle-team
 
 # Optional — only if you want G1–G10 lifecycle governance:
@@ -92,7 +92,7 @@ Add this repository as a marketplace once (pin to a release tag), then install w
 Clone at the tag first, add the marketplace once, then install whichever plugins you want:
 
 ```sh
-git clone --branch v0.3.1 https://github.com/deagy/cadre-lifecycle.git
+git clone --branch v0.3.2 https://github.com/deagy/cadre-lifecycle.git
 codex plugin marketplace add /path/to/cadre-lifecycle
 codex plugin add cadre@cadre-lifecycle-team
 
@@ -167,7 +167,7 @@ This project combines two independent upstream systems, packaged here as 4 plugi
 | **`cadre`** | Role definitions/catalog/routing, the `agents_select` Cline tool call, and the LangGraph role-dispatch engine (`agentic_sdlc_langgraph/` — despite the name, this wraps role *dispatch*, not gate execution; it never talks to the lifecycle kernel). |
 | **`cadre-lifecycle-core`** | Forge-agnostic lifecycle governance UX: `lifecycle-onboarding`/`lifecycle-review` skills (conversational wrappers around `bin/cadre sdlc`, itself a thin pass-through to the external kernel) and the kernel bootstrap script. |
 | **`cadre-lifecycle-github`** | GitHub-flavored gate-approval recording (`lifecycle-review-github`, driving `approve-from-github`/`approve-from-github-pr`). Requires `cadre-lifecycle-core`. |
-| **`cadre-lifecycle-gitlab`** | GitLab-flavored gate governance: `lifecycle-review-gitlab` records decisions (`approve-from-gitlab`/`approve-from-gitlab-mr`); `gitlab-gate-tracking` publishes GitLab tracking issues for gates and approvals, assigned to each gate's authority (`create-gate-issues`/`list-gate-issues`). Requires `cadre-lifecycle-core` and a kernel build containing `create-gate-issues` (see CHANGELOG's `v0.3.1` entry for the current caveat). |
+| **`cadre-lifecycle-gitlab`** | GitLab-flavored gate governance: `lifecycle-review-gitlab` records decisions (`approve-from-gitlab`/`approve-from-gitlab-mr`); `gitlab-gate-tracking` publishes GitLab tracking issues for gates and approvals, assigned to each gate's authority (`create-gate-issues`/`list-gate-issues`). Requires `cadre-lifecycle-core` and an `agentic-sdlc` kernel at [v0.10.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.10.0) or later. |
 
 The Cadre register remains the source of truth for role definitions, and (as of this split) also generates `cadre-lifecycle-core`'s two skills into `plugins/lifecycle/skills/` — see `cadre-ref.txt`. `cadre-lifecycle-github`/`cadre-lifecycle-gitlab` are entirely hand-authored here; the register has no concept of them. Assets in this repository are generated from the register — see "Regenerating Assets" below for the safe procedure; `cadre generate-plugin --output` cannot be run directly against this repository.
 
@@ -222,6 +222,7 @@ Pushing that bump to `main` triggers [`.github/workflows/release.yml`](.github/w
 
 See [Releases](https://github.com/deagy/cadre-lifecycle/releases) for the full history, or jump to a specific version:
 
+- [v0.3.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.2) — Update `gitlab-gate-tracking`'s kernel-release caveat now that `agentic-sdlc` v0.10.0 ships `create-gate-issues`
 - [v0.3.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.1) — Add `gitlab-gate-tracking` skill: publish GitLab tracking issues for gates/approvals, assigned to each gate's authority
 - [v0.3.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.0) — Split into 4 plugins: `cadre` (renamed from `cadre-lifecycle`) plus optional `cadre-lifecycle-core`/`-github`/`-gitlab`
 - [v0.2.5](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.5) — Add `.github/workflows/release.yml` to auto-tag and auto-publish on a version bump

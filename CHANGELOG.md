@@ -15,6 +15,21 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.3.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.2) - 2026-08-04
+
+### Fixed
+
+- **`gitlab-gate-tracking`'s kernel-availability caveat updated: `agentic-sdlc create-gate-issues` is now released.**
+  `v0.3.1`'s CHANGELOG entry and the Architecture table noted that the
+  kernel commit this skill depends on hadn't been cut into a tagged
+  `agentic-sdlc` release yet. It has, as
+  [v0.10.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.10.0) —
+  both references updated to point at that release instead of the raw
+  commit. Also fixed a broken link: the `v0.3.1` entry linked to
+  `deagy/agentic-sdlc`'s `CHANGELOG.md`, which doesn't exist in that
+  repository (it uses GitHub Releases only, no changelog file) — now
+  points at the actual release notes.
+
 ## [0.3.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.1) - 2026-08-04
 
 ### Added
@@ -27,7 +42,7 @@ below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/rel
   real GitLab account (resolved via the kernel's existing
   `authority_gitlab_username()`). Drives the new kernel commands
   `agentic-sdlc create-gate-issues`/`list-gate-issues` — see
-  [`deagy/agentic-sdlc`'s changelog](https://github.com/deagy/agentic-sdlc/blob/main/CHANGELOG.md)
+  [`deagy/agentic-sdlc` v0.10.0's release notes](https://github.com/deagy/agentic-sdlc/releases/tag/v0.10.0)
   for the kernel-side implementation, which was independently
   security-reviewed and code-reviewed before landing. The skill is
   dry-run-first by design and refuses to `--apply` without the human
@@ -35,14 +50,14 @@ below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/rel
   assigning a real person is treated as a mutation requiring human
   confirmation, the same as any other consequential action in this suite.
 
-  **Caveat**: this requires an `agentic-sdlc` kernel build containing
-  `create-gate-issues` (merged upstream at
-  [`deagy/agentic-sdlc@e798d4f`](https://github.com/deagy/agentic-sdlc/commit/e798d4f)).
-  At the time of this release, that commit has not yet been cut into a
-  tagged `agentic-sdlc` release — `provider.json`'s `kernel_compatibility`
-  range (`>=0.3.0,<0.4.0`) does not by itself guarantee an installed kernel
-  has this command; the skill's own "Before you start" step checks for it
-  and tells the human plainly if it's missing, rather than assuming.
+  **Requires**: an `agentic-sdlc` kernel at
+  [v0.10.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.10.0) or
+  later. `provider.json`'s `kernel_compatibility` range (`>=0.3.0,<0.4.0`)
+  does not by itself guarantee an installed kernel has this command (the
+  kernel's own `VERSION` constant deliberately stayed at `0.3.0` for this
+  release, since it's additive with no G1-G10 contract/schema change); the
+  skill's own "Before you start" step checks for the command and tells the
+  human plainly if it's missing, rather than assuming.
 
 ## [0.3.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.0) - 2026-08-04
 

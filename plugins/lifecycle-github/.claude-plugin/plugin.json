@@ -1,7 +1,7 @@
 {
   "name": "cadre-lifecycle-github",
   "displayName": "Cadre Lifecycle (GitHub)",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "GitHub-flavored Agentic SDLC gate-approval recording: a conversational skill that records lifecycle gate decisions from a real GitHub PR review via approve-from-github/approve-from-github-pr. Requires cadre-lifecycle-core to also be installed. If you don't have a GitHub review to cite, cadre-lifecycle-core's generic lifecycle-review skill covers that case.",
   "author": {
     "name": "Cadre maintainers",
