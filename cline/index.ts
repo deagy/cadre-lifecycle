@@ -467,9 +467,10 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
         "(routes, primary/reviewer/support roles, quality gates). When the Agentic SDLC LangGraph " +
         "engine is available, this tool invokes it natively for faster, more integrated execution; " +
         "otherwise it falls back to the legacy CLI. Plan only: never invokes agents, retrieves " +
-        "knowledge, merges, deploys, or mutates infrastructure or approvals. Requires the current " +
-        "workspace to be a checkout of the deagy/cadre repository (or a project with its own " +
-        "catalog.yaml). This plugin does not (and, with the Cline plugin API as currently published, " +
+        "knowledge, merges, deploys, or mutates infrastructure or approvals. The role catalog is " +
+        "bundled with this plugin itself, not read from the target workspace, so `root` may be any " +
+        "project — it does not need to be a checkout of deagy/cadre or contain its own catalog.yaml. " +
+        "This plugin does not (and, with the Cline plugin API as currently published, " +
         "cannot) dispatch the selected role(s) itself — a Cline plugin's setup(api, ctx) only exposes " +
         "registerTool/registerCommand/etc., not the session's spawn-agent or team primitives. After " +
         "calling this tool, the orchestrating Cline session must dispatch manually: see the \"## Cline\" " +
