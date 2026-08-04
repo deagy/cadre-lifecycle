@@ -25,18 +25,21 @@ back. Approval still only happens via `agentic-sdlc decide` or
 
 ## Before you start
 
-Confirm the target root and that `.agentic-sdlc/runs/<task-id>/run-record.json`
-already exists — if the project has never been onboarded or planned, point
-them at `lifecycle-onboarding` or `cadre sdlc plan` first.
+Reuse the target root and task-id if already established earlier in this
+conversation — only ask if genuinely not yet known. Confirm that
+`.agentic-sdlc/runs/<task-id>/run-record.json` already exists (a quick local
+check of whether `.agentic-sdlc/runs/<task-id>/` exists is a reasonable
+first move) — if the project has never been onboarded or planned, point them
+at `lifecycle-onboarding` or `cadre sdlc plan` first.
 
 Check that the installed `agentic-sdlc` kernel actually has
 `create-github-gate-issues`/`list-github-gate-issues` (run
 `./bin/cadre sdlc --help`). If missing, tell the human a kernel upgrade is
 needed and stop.
 
-Ask for the GitHub repository (`owner/name`) these issues should be created
-in, and the bot/service account login (`--as-bot`) the kernel should verify
-itself as before creating anything. Never guess either value.
+Reuse the GitHub repository (`owner/name`) and the bot/service account login
+(`--as-bot`) too if already established earlier in this conversation.
+Otherwise ask for them. Never guess either value.
 
 **Ask about the repository's visibility before running anything.** GitHub
 issues have no per-issue "confidential" flag the way GitLab does. Gate and

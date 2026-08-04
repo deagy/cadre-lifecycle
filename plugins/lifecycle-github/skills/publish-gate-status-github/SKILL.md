@@ -29,15 +29,20 @@ human any more detail than that in your summaries.
 
 ## Before you start
 
-Confirm the target root and that `.agentic-sdlc/runs/<task-id>/run-record.json`
-already exists — if the project has never been onboarded or planned, point
-them at `lifecycle-onboarding` or `cadre sdlc plan` first.
+Reuse the target root and task-id if already established earlier in this
+conversation — only ask if genuinely not yet known. Confirm that
+`.agentic-sdlc/runs/<task-id>/run-record.json` already exists (a quick local
+check of whether `.agentic-sdlc/runs/<task-id>/` exists is a reasonable
+first move) — if the project has never been onboarded or planned, point them
+at `lifecycle-onboarding` or `cadre sdlc plan` first.
 
 Check that the installed `agentic-sdlc` kernel actually has
 `publish-gate-status`/`list-gate-status` (run `./bin/cadre sdlc --help`). If
 missing, tell the human a kernel upgrade is needed and stop.
 
-Ask for, and never fabricate:
+Reuse the repository, PR number, bot username, and classification too if
+they were already established earlier in this conversation. For anything
+still missing, ask for it, and never fabricate:
 
 - the GitHub repository (`owner/name`),
 - the pull request number,

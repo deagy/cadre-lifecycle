@@ -21,4 +21,4 @@
 #
 # To pick up register changes: update this ref and commit the regenerated diff
 # in the same pull request.
-98edf0c459ef13eb39ab010770f8877707e0c587
+d4f24999440527a16689ed65120a3c60ec8f4b8f

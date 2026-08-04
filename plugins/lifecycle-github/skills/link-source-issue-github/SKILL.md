@@ -22,9 +22,12 @@ one as a source. For actually recording a gate decision, use
 
 ## Before you start
 
-Confirm the target root and that `.agentic-sdlc/runs/<task-id>/run-record.json`
-already exists — if the project has never been onboarded or planned, point
-them at `lifecycle-onboarding` or `cadre sdlc plan` first.
+Reuse the target root and task-id if already established earlier in this
+conversation — only ask if genuinely not yet known. Confirm that
+`.agentic-sdlc/runs/<task-id>/run-record.json` already exists (a quick local
+check of whether `.agentic-sdlc/runs/<task-id>/` exists is a reasonable
+first move) — if the project has never been onboarded or planned, point them
+at `lifecycle-onboarding` or `cadre sdlc plan` first.
 
 Check that the installed `agentic-sdlc` kernel actually has
 `link-intent-from-github-issue`/`link-requirements-from-github-issue` (run
@@ -53,9 +56,11 @@ plain language (reusing `lifecycle-onboarding`'s Step 4 role table). The
 kernel only accepts a link from the exact assigned authority for that
 role/gate — do not guess or substitute a different role.
 
-Ask for the GitHub repository (`owner/repo`) and the issue number. Never
-fabricate either value — if the human doesn't have them handy, stop and ask
-again rather than guessing.
+Ask for the GitHub repository (`owner/repo`) and the issue number, unless
+they were already established earlier in this conversation, in which case
+reuse them. Never fabricate either value — if the human doesn't have them
+handy and they haven't been stated already, stop and ask rather than
+guessing.
 
 ## Step 3 — Show what will happen, then confirm
 

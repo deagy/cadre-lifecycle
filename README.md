@@ -34,7 +34,7 @@ The **LangGraph orchestration engine** (`agentic_sdlc_langgraph/`) is role-dispa
 ├── .agents/                   # Publishable skills
 ├── plugins/
 │   ├── lifecycle/             # cadre-lifecycle-core plugin
-│   │   ├── skills/            # lifecycle-onboarding, lifecycle-review (register-generated)
+│   │   ├── skills/            # lifecycle-onboarding, lifecycle-review, brief-pending-gates (register-generated)
 │   │   └── tools/             # bootstrap_sdlc.py (hand-authored)
 │   ├── lifecycle-github/      # cadre-lifecycle-github plugin (hand-authored)
 │   └── lifecycle-gitlab/      # cadre-lifecycle-gitlab plugin (hand-authored)
@@ -165,7 +165,7 @@ This project combines two independent upstream systems, packaged here as 4 plugi
 | Plugin | Owns |
 |---|---|
 | **`cadre`** | Role definitions/catalog/routing, the `agents_select` Cline tool call, and the LangGraph role-dispatch engine (`agentic_sdlc_langgraph/` — despite the name, this wraps role *dispatch*, not gate execution; it never talks to the lifecycle kernel). |
-| **`cadre-lifecycle-core`** | Forge-agnostic lifecycle governance UX: `lifecycle-onboarding`/`lifecycle-review` skills (conversational wrappers around `bin/cadre sdlc`, itself a thin pass-through to the external kernel) and the kernel bootstrap script. |
+| **`cadre-lifecycle-core`** | Forge-agnostic lifecycle governance UX: `lifecycle-onboarding`/`lifecycle-review` skills (conversational wrappers around `bin/cadre sdlc`, itself a thin pass-through to the external kernel), `brief-pending-gates` (a local-only, read-only briefing of which gate is pending and who needs to decide it, for teams not using a GitHub/GitLab review flow), and the kernel bootstrap script. |
 | **`cadre-lifecycle-github`** | GitHub-flavored gate governance: `lifecycle-review-github` records decisions (`approve-from-github`/`approve-from-github-pr`); `link-source-issue-github` records a G1/G2 source issue (`link-intent-from-github-issue`/`link-requirements-from-github-issue`); `publish-gate-status-github` publishes a one-way gate-status PR comment (`publish-gate-status`); `report-gate-reviewers-github` reports PR-reviewer candidates, read-only (`request-gate-reviewers`); `create-github-gate-issues` publishes GitHub tracking issues for gates and approvals, assigned to each gate's authority (`create-github-gate-issues`/`list-github-gate-issues`); `publish-reviewer-nudge-github` posts an advisory (not a request) PR comment nudging reviewer candidates (`publish-reviewer-nudge`). Requires `cadre-lifecycle-core` and an `agentic-sdlc` kernel at [v0.12.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.12.0) or later. |
 | **`cadre-lifecycle-gitlab`** | GitLab-flavored gate governance: `lifecycle-review-gitlab` records decisions (`approve-from-gitlab`/`approve-from-gitlab-mr`); `gitlab-gate-tracking` publishes GitLab tracking issues for gates and approvals, assigned to each gate's authority (`create-gate-issues`/`list-gate-issues`); `link-source-issue-gitlab` records a G1/G2 source issue (`link-intent-from-gitlab-issue`/`link-requirements-from-gitlab-issue`); `publish-gate-status-gitlab` publishes a one-way gate-status MR comment (`publish-gate-status`); `report-gate-reviewers-gitlab` reports MR-reviewer candidates, read-only (`request-gate-reviewers-gitlab`). Requires `cadre-lifecycle-core` and an `agentic-sdlc` kernel at [v0.12.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.12.0) or later. |
 

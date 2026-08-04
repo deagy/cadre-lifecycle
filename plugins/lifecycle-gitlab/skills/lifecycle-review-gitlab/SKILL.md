@@ -23,11 +23,15 @@ model, GitLab-flavored source fields).
 
 ## Before you start
 
-Confirm the target root (`.` if you are already working inside it) and
-confirm `.agentic-sdlc/runs/<task-id>/run-record.json` already exists for the
-task they mean — if the project has never been onboarded or planned, stop and
-point them at the `lifecycle-onboarding` skill (setup) or `cadre sdlc plan`
-first.
+If the target root and task-id were already established earlier in this
+conversation, reuse them rather than re-asking. Otherwise, confirm the
+target root (`.` if you are already working inside it) and confirm
+`.agentic-sdlc/runs/<task-id>/run-record.json` already exists for the task
+they mean (a quick local check of whether `.agentic-sdlc/runs/<task-id>/`
+exists is a reasonable first move) — if the project has never been onboarded
+or planned, stop and point them at the `lifecycle-onboarding` skill (setup)
+or `cadre sdlc plan` first. Never assume or guess a root or task-id you
+haven't actually seen stated or confirmed in this conversation.
 
 Check that the installed `agentic-sdlc` kernel actually has
 `approve-from-gitlab`/`approve-from-gitlab-mr` (run `./bin/cadre sdlc --help`
@@ -40,7 +44,9 @@ suite's own provider profile resolves.
 
 ## Step 1 — Find the task and the gate
 
-Ask which task/run this is about if not already obvious from context. Run:
+Ask which task/run this is about only if it isn't already established from
+earlier in this conversation — reuse it otherwise, never re-ask for
+something you were already told. Run:
 
 ```sh
 ./bin/cadre sdlc status --root <path> --task-id <task-id>

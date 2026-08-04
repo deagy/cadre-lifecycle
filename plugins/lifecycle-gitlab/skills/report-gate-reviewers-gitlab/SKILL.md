@@ -36,10 +36,14 @@ using this report as their checklist.
 
 ## Before you start
 
-Confirm the target root (`.` if already working inside it) and confirm
-`.agentic-sdlc/runs/<task-id>/run-record.json` already exists for the task —
-if the project has never been onboarded or planned, point them at the
-`lifecycle-onboarding` skill (setup) or `cadre sdlc plan` first.
+If the target root and task-id were already established earlier in this
+conversation, reuse them rather than re-asking. Otherwise, confirm the
+target root (`.` if already working inside it) and confirm
+`.agentic-sdlc/runs/<task-id>/run-record.json` already exists for the task
+(a quick local check of whether `.agentic-sdlc/runs/<task-id>/` exists is a
+reasonable first move) — if the project has never been onboarded or planned,
+point them at the `lifecycle-onboarding` skill (setup) or `cadre sdlc plan`
+first.
 
 Check that the installed `agentic-sdlc` kernel actually has
 `request-gate-reviewers-gitlab` (run `./bin/cadre sdlc --help` and look for
@@ -50,7 +54,9 @@ needed and stop — do not improvise a substitute, and do not fall back to
 Prefer `./bin/cadre sdlc ...` over the bare `agentic-sdlc` binary, so this
 suite's own provider profile resolves.
 
-Ask for, and never fabricate or guess:
+The same rule applies to everything below: reuse a value already established
+earlier in this conversation rather than re-asking for it. Ask for, and
+never fabricate or guess, whatever is still genuinely unknown:
 
 - The GitLab project path (`namespace/project`).
 - The merge request internal ID (`--mr-iid`) — this command never

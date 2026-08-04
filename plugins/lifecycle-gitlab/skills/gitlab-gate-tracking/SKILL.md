@@ -25,17 +25,20 @@ them back. Approval still only happens via `agentic-sdlc decide` or
 
 ## Before you start
 
-Confirm the target root and that `.agentic-sdlc/runs/<task-id>/run-record.json`
-already exists — if the project has never been onboarded or planned, point
-them at `lifecycle-onboarding` or `cadre sdlc plan` first.
+Reuse the target root and task-id if already established earlier in this
+conversation — only ask if genuinely not yet known. Confirm that
+`.agentic-sdlc/runs/<task-id>/run-record.json` already exists (a quick local
+check of whether `.agentic-sdlc/runs/<task-id>/` exists is a reasonable
+first move) — if the project has never been onboarded or planned, point them
+at `lifecycle-onboarding` or `cadre sdlc plan` first.
 
 Check that the installed `agentic-sdlc` kernel actually has
 `create-gate-issues`/`list-gate-issues` (run `./bin/cadre sdlc --help`). If
 missing, tell the human a kernel upgrade is needed and stop.
 
-Ask for the GitLab project path (`namespace/project`) these issues should be
-created in, and the bot/service account username (`--as-bot`) the kernel
-should verify itself as before creating anything. Never guess either value.
+Reuse the GitLab project path (`namespace/project`) and the bot/service
+account username (`--as-bot`) too if already established earlier in this
+conversation. Otherwise ask for them. Never guess either value.
 
 ## Step 1 — Check what already exists
 
