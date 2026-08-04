@@ -14,6 +14,16 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.2.4](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.4) - 2026-08-04
+
+### Fixed
+
+- **README's Claude Code and Codex CLI install instructions were pinned to
+  `v0.1.0`**, the repository's very first tag, left over from before the
+  release-tagging convention existed. Both `/plugin marketplace add
+  deagy/cadre-lifecycle@v0.1.0` and `git clone --branch v0.1.0 ...` now
+  pin to `v0.2.4`, this release itself.
+
 ## [0.2.3](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.3) - 2026-08-04
 
 ### Added

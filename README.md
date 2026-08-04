@@ -64,7 +64,7 @@ cline doctor fix
 Add this as a marketplace plugin (pin to a release tag):
 
 ```text
-/plugin marketplace add deagy/cadre-lifecycle@v0.1.0
+/plugin marketplace add deagy/cadre-lifecycle@v0.2.4
 /plugin install cadre-lifecycle@cadre-team
 ```
 
@@ -73,7 +73,7 @@ Add this as a marketplace plugin (pin to a release tag):
 Clone at the tag first, then install:
 
 ```sh
-git clone --branch v0.1.0 https://github.com/deagy/cadre-lifecycle.git
+git clone --branch v0.2.4 https://github.com/deagy/cadre-lifecycle.git
 codex plugin marketplace add /path/to/cadre-lifecycle
 codex plugin add cadre-lifecycle@cadre-team
 ```
@@ -176,6 +176,7 @@ python3 tools/plugin_version.py --set 0.1.0
 
 See [Releases](https://github.com/deagy/cadre-lifecycle/releases) for the full history, or jump to a specific version:
 
+- [v0.2.4](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.4) — Fix stale v0.1.0 install pins in Claude Code / Codex CLI instructions
 - [v0.2.3](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.3) — Link GitHub Releases from README.md and CHANGELOG.md
 - [v0.2.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.2) — Fix `agents_select` tool declaration breaking on every call in real Cline hosts
 - [v0.2.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.1) — Fix unsafe `cadre generate-plugin --output` guidance
