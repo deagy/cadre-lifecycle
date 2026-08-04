@@ -13,6 +13,22 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `.claude-plugin/plugin.json` / `.codex-plugin/plugin.json`, checked with
 `python3 tools/plugin_version.py --check`/`--set`.
 
+## [0.2.2] - 2026-08-04
+
+### Fixed
+
+- **`agents_select` failed on every call inside a real Cline host** (not
+  reproducible in this plugin's own tests). `createTool()` only converts a
+  Zod `inputSchema` to JSON Schema via `schema instanceof ZodType`, checked
+  against the *host's* bundled `zod`, not the plugin's. A Cline plugin loads
+  from a separate installation than its host, so even a version-matching
+  `zod` is a different module instance there — the check silently failed,
+  conversion was skipped, and the raw `ZodObject` (which carries circular
+  internal references) was registered as the tool's declared schema,
+  breaking its serialization. `cline/index.ts` now converts the schema to
+  JSON Schema with the plugin's own `zod` before registering it, removing
+  the dependency on that cross-realm `instanceof` check.
+
 ## [0.2.1] - 2026-08-04
 
 ### Fixed
