@@ -1,7 +1,7 @@
 {
   "name": "cadre-lifecycle-github",
   "displayName": "Cadre Lifecycle (GitHub)",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "GitHub-flavored Agentic SDLC gate governance: lifecycle-review-github records lifecycle gate decisions from a real GitHub PR review via approve-from-github/approve-from-github-pr; link-source-issue-github records a real GitHub issue as the recorded source for a task's G1 (Intent) or G2 (Requirements Baseline) gate via link-intent-from-github-issue/link-requirements-from-github-issue; create-github-gate-issues publishes GitHub tracking issues per applicable lifecycle gate plus linked approval issues assigned to each gate's authority via create-github-gate-issues/list-github-gate-issues; report-gate-reviewers-github reports (read-only, never requests) which GitHub logins would be requested as PR reviewers for a task's lifecycle gates via request-gate-reviewers; publish-gate-status-github posts (and idempotently updates) a one-way, read-only gate-status summary comment on a task's GitHub PR via publish-gate-status/list-gate-status; publish-reviewer-nudge-github posts (and idempotently updates) an advisory, SUGGESTION-ONLY comment naming reviewer candidates via publish-reviewer-nudge/list-reviewer-nudge -- never a review request and never notifies anyone. Requires cadre-lifecycle-core to also be installed. If you don't have a GitHub review to cite, cadre-lifecycle-core's generic lifecycle-review skill covers that case.",
   "author": {
     "name": "Cadre maintainers",

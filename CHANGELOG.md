@@ -15,6 +15,16 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.6.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.6.0) - 2026-08-04
+
+### Added
+
+- **`brief-pending-gates`** (`cadre-lifecycle-core`) — a local-only, forge-agnostic briefing of a task's pending lifecycle gates: which gate(s) are still awaiting a decision and which authority role/person is required for each. Composes the existing `agentic-sdlc status` output with direct `run-record.json` (`authority_requirements`) and `authorities.json` (assignee) reads — it does not modify `gate_status_projection()` or add any kernel code, preserving that read path's identity-minimization boundary. Aimed at teams recording approvals via plain `agentic-sdlc decide` rather than a GitHub/GitLab review flow, who otherwise have no equivalent to `report-gate-reviewers-*`/`publish-gate-status-*`'s pending-reviewer visibility. No new `agentic-sdlc` kernel version is required for this skill.
+
+### Changed
+
+Tightened the "Before you start" wording across all 11 existing forge skills (`cadre-lifecycle-github`, `cadre-lifecycle-gitlab`) to explicitly permit reusing root/task-id/project-path context already established earlier in the conversation instead of re-asking every time, while preserving each skill's "never fabricate" invariant. Came out of the same follow-up review round as `brief-pending-gates`; both were found to need no new kernel code.
+
 ## [0.5.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.5.0) - 2026-08-04
 
 ### Added

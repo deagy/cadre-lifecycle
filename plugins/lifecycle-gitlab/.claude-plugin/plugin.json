@@ -1,7 +1,7 @@
 {
   "name": "cadre-lifecycle-gitlab",
   "displayName": "Cadre Lifecycle (GitLab)",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "GitLab-flavored Agentic SDLC gate governance: lifecycle-review-gitlab records gate decisions from a real GitLab MR approval (approve-from-gitlab/approve-from-gitlab-mr); gitlab-gate-tracking publishes GitLab tracking issues for a task's gates and assigns linked approval-subtask issues to each gate's authority (create-gate-issues/list-gate-issues); link-source-issue-gitlab records a real GitLab issue as the recorded source for a task's G1 (Intent) or G2 (Requirements Baseline) gate (link-intent-from-gitlab-issue/link-requirements-from-gitlab-issue); publish-gate-status-gitlab posts (and idempotently updates) a one-way, read-only gate-status summary note on a task's GitLab MR (publish-gate-status/list-gate-status); report-gate-reviewers-gitlab reports (read-only, never sets) which GitLab usernames would be set as MR reviewers for a task's lifecycle gates (request-gate-reviewers-gitlab). Requires cadre-lifecycle-core to also be installed and a recent-enough agentic-sdlc kernel.",
   "author": {
     "name": "Cadre maintainers",
