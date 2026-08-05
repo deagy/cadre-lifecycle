@@ -18,7 +18,7 @@ Resolve Python 3.10+ as documented in the runbook. From each internal-tool compo
 python3 -B -m unittest discover -s test -p "test_*.py"
 ```
 
-After changing role definitions in the independent register, regenerate into a scratch directory (`cadre generate-plugin --output /tmp/scratch`, never directly against this repository — its README template describes the separate `deagy/cadre-plugin` repo, not this one), diff against this repository, and apply everything except the hand-authored exceptions listed above, then re-run repository health checks. See README.md's "Regenerating Assets" for the exact steps.
+After changing role definitions in the independent register, regenerate into a scratch directory (`cadre generate-plugin --output /tmp/scratch`, never directly against this repository — its README template still describes a single-plugin structure, not this repository's actual 4-plugin split, even though it now names `deagy/cadre-lifecycle` as the successor to the archived `deagy/cadre-plugin`), diff against this repository, and apply everything except the hand-authored exceptions listed above, then re-run repository health checks. See README.md's "Regenerating Assets" for the exact steps.
 
 For the Cline plugin:
 

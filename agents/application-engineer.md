@@ -24,7 +24,7 @@ Own routine, non-debugging changes to this suite's own tooling and orchestration
 ## Outputs
 
 - Scoped changes to `roster/catalog.yaml`, role `AGENT.md` files, `roster/orchestration/routing.yaml`, orchestration source, or publishable skills, plus their tests
-- Regenerated `catalog.yaml`/`routing.yaml` and the generated half of `provider/` (`cadre generate-role-metadata`) when the change touches generated output. The packaged plugin is not built here — it is regenerated in a `deagy/cadre-plugin` checkout (`cadre generate-plugin --output /path/to/cadre-plugin`) and committed there.
+- Regenerated `catalog.yaml`/`routing.yaml` and the generated half of `provider/` (`cadre generate-role-metadata`) when the change touches generated output. The packaged plugin is not built here — it is regenerated in a `deagy/cadre-lifecycle` checkout (`cadre generate-plugin --output /path/to/cadre-lifecycle`) and committed there.
 - Implementation notes, assumptions, known limitations, and reviewer handoff
 
 ## Required checks
@@ -159,12 +159,15 @@ cicd:
   container_registry: gitlab container registry
   artifact_signing: >
     cosign keyless (Sigstore OIDC), sign once at build tier, verify before every
-    promotion. This repository's own published artifact is the Cadre plugin
-    (deagy/cadre-plugin), which meets this through GitHub's hosted Sigstore
-    instance rather than the cosign CLI: its release workflow attests SLSA build
-    provenance for the release tarball and an SBOM, verifiable with `gh
-    attestation verify`. Equivalent trust root (Fulcio/Rekor), no signing key to
-    manage. The pip/pipx wheel is deliberately not published anywhere, so it has
+    promotion. This repository's own published artifact is the Cadre plugin,
+    now packaged in deagy/cadre-lifecycle (successor to the archived
+    deagy/cadre-plugin, which met this through GitHub's hosted Sigstore
+    instance rather than the cosign CLI, attesting SLSA build provenance for
+    the release tarball and an SBOM, verifiable with `gh attestation verify`).
+    deagy/cadre-lifecycle's release workflow does not currently attach a
+    release tarball, SBOM, or attestation -- this is a known regression from
+    the archived repository's release process, not yet closed. The pip/pipx
+    wheel is deliberately not published anywhere, so it has
     no promotion path to verify.
 
 observability:
