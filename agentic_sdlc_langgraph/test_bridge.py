@@ -102,15 +102,39 @@ class TestParseInput(unittest.TestCase):
         self.assertTrue(len(errors) > 0)
         self.assertIn("cannot be combined", errors[0])
 
-    def test_invalid_classification(self):
-        """Test that invalid classification is rejected."""
+    def test_invalid_classification_accepted_at_parse_time_for_needs_triage_task(self):
+        """`parse_input()` (and the `DispatchRequest.validate()` it calls)
+        does not, by itself, reject an out-of-taxonomy classification: that
+        check is deferred to the dispatch plan builder
+        (`build_dispatch_plan._build_knowledge_context`), which only
+        enforces it once a task actually selects an agent. "Test" doesn't
+        match any route/risk rule (needs-triage), so no format error should
+        surface here. See TestFullPipelineClassificationParity below for the
+        full-bridge-vs-CLI behavior this guards, and
+        test_invalid_classification_is_rejected_when_task_routes_to_an_agent
+        for the case where the check still fires."""
         raw = json.dumps({
             "task": "Test",
             "classification": "top-secret",
         })
         request, errors = parse_input(raw)
-        self.assertTrue(len(errors) > 0)
-        self.assertIn("classification", errors[0].lower())
+        self.assertEqual(errors, [])
+        self.assertEqual(request.classification, "top-secret")
+
+    def test_invalid_classification_is_rejected_when_task_routes_to_an_agent(self):
+        """Cross-path consistency check for Bug 1
+        (cline-select-bridge-bug-2026-08-05): a task that actually selects an
+        agent must still reject an invalid classification via the full
+        bridge pipeline (not just via parse_input()), matching the CLI's
+        `cadre select` behavior for the same input."""
+        input_data = json.dumps({
+            "task": "Implement user authentication",
+            "classification": "top-secret",
+        })
+        exit_code, response = run_bridge(stdin_data=input_data)
+        self.assertEqual(exit_code, 1)
+        self.assertFalse(response["success"])
+        self.assertIn("classification", response["error"].lower())
 
     def test_require_sdlc_string_true(self):
         """Test parsing requireSdlc as string 'true'."""
@@ -244,6 +268,43 @@ class TestIntegration(unittest.TestCase):
         })
         exit_code, response = run_bridge(stdin_data=input_data)
         self.assertIn("success", response)
+
+
+class TestFullPipelineClassificationParity(unittest.TestCase):
+    """Regression coverage for Bug 1 (cline-select-bridge-bug-2026-08-05):
+    classification-validation divergence between the native bridge path
+    (runtime.py's DispatchRequest.validate()) and the CLI path (`cadre
+    select` / build_dispatch_plan.py's _build_knowledge_context()).
+
+    Reproduction that motivated this fix:
+        ./bin/cadre select --task "test task" --classification "top-secret"
+            -> succeeds (needs-triage), exit 0
+        echo '{"task":"test task","classification":"top-secret"}' \
+            | python3 agentic_sdlc_langgraph/bridge.py
+            -> used to hard-fail (INVALID_INPUT), exit 1
+
+    These two must agree for every input, not just the needs-triage case
+    covered here — TestParseInput.test_invalid_classification_is_rejected_when_task_routes_to_an_agent
+    covers the "does route" case from the bridge side.
+    """
+
+    def test_needs_triage_task_with_invalid_classification_succeeds_via_bridge(self):
+        """A needs-triage task (one that matches no route/risk rule) must
+        succeed via the bridge with an out-of-taxonomy classification,
+        exactly as it does via the CLI -- this is the exact bug
+        reproduction case, run through the full bridge pipeline rather than
+        just parse_input() in isolation."""
+        input_data = json.dumps({
+            "task": "test task",
+            "classification": "top-secret",
+        })
+        exit_code, response = run_bridge(stdin_data=input_data)
+        self.assertEqual(exit_code, 0, response)
+        self.assertTrue(response["success"], response.get("error"))
+        self.assertEqual(response["plan"]["status"], "needs-triage")
+        self.assertEqual(
+            response["plan"]["knowledge_context"]["status"], "not-applicable"
+        )
 
 
 if __name__ == "__main__":

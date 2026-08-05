@@ -272,5 +272,53 @@ class TestDispatchEngineFallback(unittest.TestCase):
         self.assertFalse(fallback.execute_called)
 
 
+class TestClassificationValidationParity(unittest.TestCase):
+    """Regression coverage for Bug 1 (cline-select-bridge-bug-2026-08-05):
+    DispatchRequest.validate() used to unconditionally reject an
+    out-of-taxonomy `classification`, even for a needs-triage task (one that
+    selects no agent), diverging from build_dispatch_plan.py's
+    _build_knowledge_context() -- the CLI's own dispatch path, and the
+    authoritative implementation -- which only enforces classification
+    validity once a task actually selects at least one agent. See the
+    comment on DispatchRequest.validate() for the full explanation this
+    class is cross-referenced from.
+    """
+
+    def test_validate_does_not_reject_invalid_classification_at_parse_time(self):
+        # No routing has happened yet at this point, so validate() cannot
+        # and must not reject on classification format/taxonomy alone.
+        request = DispatchRequest(task="t", classification="top-secret")
+        self.assertEqual(request.validate(), [])
+
+    def test_needs_triage_task_with_invalid_classification_dispatches_successfully(self):
+        adapter = NativeDispatchAdapter()
+        # No explicit files: matches no route/risk rule in routing.yaml (the
+        # actual reproduction case) -> needs-triage, selects no agent ->
+        # classification is never checked. (An explicit files=["README.md"]
+        # would spuriously match the "documentation" route by path alone,
+        # regardless of task text, which would defeat this test's purpose.)
+        request = DispatchRequest(task="test task", classification="top-secret")
+        response = adapter.execute(request)
+        self.assertTrue(response.success, response.error)
+        self.assertEqual(response.plan["status"], "needs-triage")
+        self.assertEqual(response.plan["knowledge_context"]["status"], "not-applicable")
+
+    def test_routed_task_with_invalid_classification_is_rejected(self):
+        # Must NOT be weakened by the needs-triage fix above: once a task
+        # actually selects an agent, an invalid classification must still
+        # be rejected (build_dispatch_plan.py raises ValueError, which the
+        # native adapter surfaces as NATIVE_ERROR).
+        adapter = NativeDispatchAdapter()
+        request = DispatchRequest(
+            task="Implement user authentication",
+            files=["README.md"],
+            classification="top-secret",
+        )
+        response = adapter.execute(request)
+        self.assertFalse(response.success)
+        self.assertEqual(response.error_code, "NATIVE_ERROR")
+        self.assertIn("classification", (response.error or "").lower())
+
+
 if __name__ == "__main__":
     unittest.main()
