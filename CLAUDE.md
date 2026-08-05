@@ -8,9 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **`cadre`** (this repository's root) — role selection: 71 specialist roles, routing rules, orchestration runtime, the `agents_select` Cline tool call (`cline/`), and the LangGraph role-*dispatch* engine (`agentic_sdlc_langgraph/` — despite the name, this is dispatch/routing code used by `cline/`, not lifecycle-gate execution; it never talks to the Agentic SDLC kernel).
 - **`cadre-lifecycle-core`** (`plugins/lifecycle/`, optional) — forge-agnostic G1–G10 lifecycle governance UX: `lifecycle-onboarding`/`lifecycle-review` skills and a kernel bootstrap script, invoking the external `agentic-sdlc` kernel via `bin/cadre sdlc`.
-- **`cadre-lifecycle-github`** / **`cadre-lifecycle-gitlab`** (`plugins/lifecycle-github/`, `plugins/lifecycle-gitlab/`, optional, require `cadre-lifecycle-core`) — forge-flavored gate-approval recording (`approve-from-github*`/`approve-from-gitlab*`) instead of the generic evidence-citation flow.
+- **`cadre-lifecycle-github`** / **`cadre-lifecycle-gitlab`** (`plugins/lifecycle-github/`, `plugins/lifecycle-gitlab/`, optional, self-sufficient) — forge-flavored gate-approval recording (`approve-from-github*`/`approve-from-gitlab*`) instead of the generic evidence-citation flow. Each bundles its own copy of the onboarding, generic gate-review, and pending-gates-briefing skills (renamed with a `-github`/`-gitlab` suffix) plus its own kernel-bootstrap script, so neither requires `cadre-lifecycle-core` to be installed.
 
-The Cadre register (`deagy/cadre`) remains independent; `cadre`'s assets, and `cadre-lifecycle-core`'s two skills (`plugins/lifecycle/skills/`), are generated from it — see `cadre-ref.txt`. `cadre-lifecycle-github`/`cadre-lifecycle-gitlab` are entirely hand-authored; the register has no concept of them. The Agentic SDLC kernel is a separately installed CLI (`agentic-sdlc`, from `deagy/agentic-sdlc`); `bin/cadre sdlc` shells out to it and fails with an install pointer if it isn't present. That `sdlc` branch ships as part of `cadre` regardless of whether any lifecycle plugin is installed — it's a harmless generic pass-through that only becomes useful once the kernel is installed (typically via `cadre-lifecycle-core`'s bootstrap script).
+The Cadre register (`deagy/cadre`) remains independent; `cadre`'s assets, and `cadre-lifecycle-core`'s three skills (`plugins/lifecycle/skills/`), are generated from it — see `cadre-ref.txt`. `cadre-lifecycle-github`/`cadre-lifecycle-gitlab` are entirely hand-authored, including their bundled skill and bootstrap-script copies, which are hand-maintained duplicates of `cadre-lifecycle-core`'s register-generated equivalents (kept in sync via `tools/test_plugin_duplication_health.py`); the register has no concept of them. `provider.json` itself is not duplicated — it stays a single shared root-level file that all three plugins' `bootstrap_sdlc.py` copies read; only the skills and the bootstrap script are duplicated per forge plugin. The Agentic SDLC kernel is a separately installed CLI (`agentic-sdlc`, from `deagy/agentic-sdlc`); `bin/cadre sdlc` shells out to it and fails with an install pointer if it isn't present. That `sdlc` branch ships as part of `cadre` regardless of whether any lifecycle plugin is installed — it's a harmless generic pass-through that only becomes useful once the kernel is installed (typically via one of the lifecycle plugins' bootstrap scripts — `cadre-lifecycle-core`, `cadre-lifecycle-github`, and `cadre-lifecycle-gitlab` each ship their own copy).
 
 ## Commands
 
@@ -36,7 +36,7 @@ cd agentic_sdlc_langgraph && python3 -m unittest discover -s . -p "test_*.py" -v
 ```sh
 bin/cadre select --help        # role selection
 bin/cadre knowledge --help     # knowledge store
-bin/cadre sdlc --help          # lifecycle operations (requires cadre-lifecycle-core's provider.json + the external kernel)
+bin/cadre sdlc --help          # lifecycle operations (requires the repository-root provider.json + the external kernel)
 ```
 
 ### Plugin versioning / release tooling (`tools/`)

@@ -1,6 +1,6 @@
 ---
 name: report-gate-reviewers-github
-description: Conversationally report which GitHub logins would be requested as PR reviewers for a task's lifecycle gates, for a human who does not want to touch a CLI or JSON directly. Use when a user asks "who should review this gate on GitHub," "who do I need to request reviews from," or "check reviewer status for this PR" for a project already onboarded with lifecycle-onboarding. This is read-only/reporting only — it never posts a review request; use it to prepare what to do manually in the GitHub UI.
+description: Conversationally report which GitHub logins would be requested as PR reviewers for a task's lifecycle gates, for a human who does not want to touch a CLI or JSON directly. Use when a user asks "who should review this gate on GitHub," "who do I need to request reviews from," or "check reviewer status for this PR" for a project already onboarded with lifecycle-onboarding-github. This is read-only/reporting only — it never posts a review request; use it to prepare what to do manually in the GitHub UI.
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree,
@@ -37,7 +37,7 @@ target root (`.` if already working inside it) and confirm
 `.agentic-sdlc/runs/<task-id>/run-record.json` already exists for the task
 (a quick local check of whether `.agentic-sdlc/runs/<task-id>/` exists is a
 reasonable first move) — if the project has never been onboarded or planned,
-point them at the `lifecycle-onboarding` skill (setup) or `cadre sdlc plan`
+point them at the `lifecycle-onboarding-github` skill (setup) or `cadre sdlc plan`
 first.
 
 Check that the installed `agentic-sdlc` kernel actually has
@@ -146,7 +146,7 @@ already-built candidate was withheld):
 
 - `authority-unknown` — that role has no entry in
   `.agentic-sdlc/authorities.json` yet; point back at
-  `lifecycle-onboarding`'s Step 4.
+  `lifecycle-onboarding-github`'s Step 4.
 - `authority-unassigned` — the role exists but has no one assigned; same
   pointer.
 - `no-github-binding` — the assigned person's identity isn't in GitHub-login

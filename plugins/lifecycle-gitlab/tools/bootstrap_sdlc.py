@@ -19,10 +19,10 @@ there would be silently deleted on the next sync. `tools/` is not part of
 that generated set (see `tools/plugin_version.py`, the existing precedent
 for a hand-authored script invoked directly rather than through `bin/cadre`).
 
-    python3 plugins/lifecycle/tools/bootstrap_sdlc.py                       # install (if needed) + configure this project
-    python3 plugins/lifecycle/tools/bootstrap_sdlc.py --dry-run              # report what would happen, change nothing
-    python3 plugins/lifecycle/tools/bootstrap_sdlc.py --skip-init             # install/verify the kernel only
-    python3 plugins/lifecycle/tools/bootstrap_sdlc.py --root /path/to/project --profile secure-cloud
+    python3 plugins/lifecycle-gitlab/tools/bootstrap_sdlc.py                       # install (if needed) + configure this project
+    python3 plugins/lifecycle-gitlab/tools/bootstrap_sdlc.py --dry-run              # report what would happen, change nothing
+    python3 plugins/lifecycle-gitlab/tools/bootstrap_sdlc.py --skip-init             # install/verify the kernel only
+    python3 plugins/lifecycle-gitlab/tools/bootstrap_sdlc.py --root /path/to/project --profile secure-cloud
 
 Never reinstalls over an existing `agentic-sdlc` the human already has on
 `PATH` or pointed at via `AGENTIC_SDLC_BIN`, even if its version falls

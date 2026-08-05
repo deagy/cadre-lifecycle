@@ -1,6 +1,6 @@
 ---
 name: publish-gate-status-github
-description: Conversationally publish (and idempotently update in place on re-run) a one-way, read-only gate-status summary comment on a task's GitHub PR, via publish-gate-status/list-gate-status, for a human who does not want to touch a CLI or JSON directly. Use when a user asks to "post gate status on this PR," "update the gate-status comment," "show reviewers the current gate table on GitHub," or "keep the PR's gate summary current" for a project already onboarded with lifecycle-onboarding. This is unrelated to lifecycle-review-github: it never records or reads back an approval, it only posts a diagnostics summary.
+description: Conversationally publish (and idempotently update in place on re-run) a one-way, read-only gate-status summary comment on a task's GitHub PR, via publish-gate-status/list-gate-status, for a human who does not want to touch a CLI or JSON directly. Use when a user asks to "post gate status on this PR," "update the gate-status comment," "show reviewers the current gate table on GitHub," or "keep the PR's gate summary current" for a project already onboarded with lifecycle-onboarding-github. This is unrelated to lifecycle-review-github: it never records or reads back an approval, it only posts a diagnostics summary.
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.
@@ -34,7 +34,7 @@ conversation — only ask if genuinely not yet known. Confirm that
 `.agentic-sdlc/runs/<task-id>/run-record.json` already exists (a quick local
 check of whether `.agentic-sdlc/runs/<task-id>/` exists is a reasonable
 first move) — if the project has never been onboarded or planned, point them
-at `lifecycle-onboarding` or `cadre sdlc plan` first.
+at `lifecycle-onboarding-github` or `cadre sdlc plan` first.
 
 Check that the installed `agentic-sdlc` kernel actually has
 `publish-gate-status`/`list-gate-status` (run `./bin/cadre sdlc --help`). If
@@ -144,6 +144,6 @@ created or updated. Say so plainly.
   skill, even without a plan-digest handshake.
 - Always restate that the posted comment is not approval evidence and is
   never read back by `agentic-sdlc` — correct a human who implies otherwise,
-  and point them at `lifecycle-review`/`lifecycle-review-github` for actually
+  and point them at `lifecycle-review-generic-github`/`lifecycle-review-github` for actually
   recording a gate decision.
 - Summarize outcomes in prose after each step.

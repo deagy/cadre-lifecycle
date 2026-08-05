@@ -1,6 +1,6 @@
 ---
 name: link-source-issue-gitlab
-description: Conversationally record a real GitLab issue as the recorded source for a task's G1 (Intent) or G2 (Requirements Baseline) gate, via link-intent-from-gitlab-issue/link-requirements-from-gitlab-issue, for a human who does not want to touch a CLI or JSON directly. Use when a user asks to "link this GitLab issue as the source for G1/Intent," "record this issue as the requirements source," or "attach a GitLab issue to G1/G2" for a project already onboarded with lifecycle-onboarding. This only ever applies to G1 or G2, and only records a source, not an approval — for approvals from a GitLab MR approval use lifecycle-review-gitlab, for gate tracking issues use gitlab-gate-tracking, and for any other gate use lifecycle-review.
+description: Conversationally record a real GitLab issue as the recorded source for a task's G1 (Intent) or G2 (Requirements Baseline) gate, via link-intent-from-gitlab-issue/link-requirements-from-gitlab-issue, for a human who does not want to touch a CLI or JSON directly. Use when a user asks to "link this GitLab issue as the source for G1/Intent," "record this issue as the requirements source," or "attach a GitLab issue to G1/G2" for a project already onboarded with lifecycle-onboarding-gitlab. This only ever applies to G1 or G2, and only records a source, not an approval — for approvals from a GitLab MR approval use lifecycle-review-gitlab, for gate tracking issues use gitlab-gate-tracking, and for any other gate use lifecycle-review-generic-gitlab.
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.
@@ -18,7 +18,7 @@ separate, lower-stakes action than deciding a gate. This mirrors the same
 disclaimer `gitlab-gate-tracking` carries for its own artifacts: closing or
 commenting on an issue is never itself an approval, and neither is linking
 one as a source. For actually recording a gate decision, use
-`lifecycle-review`/`lifecycle-review-gitlab` instead.
+`lifecycle-review-generic-gitlab`/`lifecycle-review-gitlab` instead.
 
 ## Before you start
 
@@ -27,7 +27,7 @@ conversation — only ask if genuinely not yet known. Confirm that
 `.agentic-sdlc/runs/<task-id>/run-record.json` already exists (a quick local
 check of whether `.agentic-sdlc/runs/<task-id>/` exists is a reasonable
 first move) — if the project has never been onboarded or planned, point them
-at `lifecycle-onboarding` or `cadre sdlc plan` first.
+at `lifecycle-onboarding-gitlab` or `cadre sdlc plan` first.
 
 Check that the installed `agentic-sdlc` kernel actually has
 `link-intent-from-gitlab-issue`/`link-requirements-from-gitlab-issue` (run
@@ -39,7 +39,7 @@ needed and stop.
 Ask which gate this is for. **Only G1 (Intent) and G2 (Requirements
 Baseline) accept a source issue link** — no other gate does. If the human
 names any other gate (G3–G10), tell them plainly this skill only applies to
-G1/G2, and point them at `lifecycle-onboarding` (setup) or `lifecycle-review`
+G1/G2, and point them at `lifecycle-onboarding-gitlab` (setup) or `lifecycle-review-generic-gitlab`
 (recording a decision for any gate) instead. Do not attempt to force a link
 for a gate this skill doesn't cover.
 
@@ -52,7 +52,7 @@ Map their answer to the command you'll use in Step 4:
 
 Read the target gate's `authority_requirements` from
 `.agentic-sdlc/runs/<task-id>/run-record.json`, and ask the human's role in
-plain language (reusing `lifecycle-onboarding`'s Step 4 role table). The
+plain language (reusing `lifecycle-onboarding-gitlab`'s Step 4 role table). The
 kernel only accepts a link from the exact assigned authority for that
 role/gate — do not guess or substitute a different role.
 
@@ -110,7 +110,7 @@ show that raw string; translate it:
 - `"<gate> authority role <role> is not applicable"` → that role doesn't
   apply to this gate for this task; re-check with the human.
 - `"authority <role> is not assigned"` → this role has no one assigned yet;
-  point back at `lifecycle-onboarding`'s Step 4.
+  point back at `lifecycle-onboarding-gitlab`'s Step 4.
 - `"unable to fetch GitLab issue for <project_path> issue <iid>: ..."` → the
   issue doesn't exist, the project path is wrong, or the GitLab API call
   failed (auth, network, rate limit). Tell the human plainly which of these
@@ -121,7 +121,7 @@ show that raw string; translate it:
   something looked wrong with the issue data returned and offer to retry.
 - `"unknown gate in run record"` / `"unknown authority role"` → something is
   inconsistent with this task's run record or authorities; do not guess,
-  surface it plainly and suggest checking `lifecycle-onboarding`'s setup.
+  surface it plainly and suggest checking `lifecycle-onboarding-gitlab`'s setup.
 
 A gate other than G1/G2 will never reach this command at all — that's
 handled by Step 1's up-front check, not a runtime error from the kernel.
@@ -132,7 +132,7 @@ handled by Step 1's up-front check, not a runtime error from the kernel.
   ask to see the underlying files or commands.
 - Never fabricate a project path, issue iid, task id, or role.
 - A recorded source issue link is never approval evidence — always correct a
-  human who implies otherwise, and point them at `lifecycle-review`/
+  human who implies otherwise, and point them at `lifecycle-review-generic-gitlab`/
   `lifecycle-review-gitlab` for actually recording a gate decision.
 - Relinking replaces the gate's prior recorded source; it does not add a
   second one. Make sure the human understands this before Step 4 if a prior

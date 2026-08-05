@@ -1,6 +1,6 @@
 ---
 name: create-github-gate-issues
-description: Conversationally publish GitHub tracking issues for a task's lifecycle gates, and linked approval issues assigned to each gate's authority, for a human who does not want to touch a CLI or JSON directly. Use when a user asks to "create GitHub issues for this task's gates," "track approvals in GitHub," "publish gate issues," or "make GitHub issues for the approvers" for a project already onboarded with lifecycle-onboarding. This is the opposite direction from lifecycle-review-github: it writes new issues to GitHub, it does not read an existing approval back into the kernel.
+description: Conversationally publish GitHub tracking issues for a task's lifecycle gates, and linked approval issues assigned to each gate's authority, for a human who does not want to touch a CLI or JSON directly. Use when a user asks to "create GitHub issues for this task's gates," "track approvals in GitHub," "publish gate issues," or "make GitHub issues for the approvers" for a project already onboarded with lifecycle-onboarding-github. This is the opposite direction from lifecycle-review-github: it writes new issues to GitHub, it does not read an existing approval back into the kernel.
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.
@@ -20,7 +20,7 @@ This is unrelated to `lifecycle-review-github`: that skill reads an
 This skill only creates tracking issues; **closing or commenting on one of
 these issues is never itself an approval** — the kernel never reads them
 back. Approval still only happens via `agentic-sdlc decide` or
-`approve-from-github`/`approve-from-github-pr` (see `lifecycle-review`/
+`approve-from-github`/`approve-from-github-pr` (see `lifecycle-review-generic-github`/
 `lifecycle-review-github`).
 
 ## Before you start
@@ -30,7 +30,7 @@ conversation — only ask if genuinely not yet known. Confirm that
 `.agentic-sdlc/runs/<task-id>/run-record.json` already exists (a quick local
 check of whether `.agentic-sdlc/runs/<task-id>/` exists is a reasonable
 first move) — if the project has never been onboarded or planned, point them
-at `lifecycle-onboarding` or `cadre sdlc plan` first.
+at `lifecycle-onboarding-github` or `cadre sdlc plan` first.
 
 Check that the installed `agentic-sdlc` kernel actually has
 `create-github-gate-issues`/`list-github-gate-issues` (run
@@ -132,7 +132,7 @@ and any assignee drift detected on a reused issue (see Step 6).
 Never show raw reason codes; translate them:
 
 - `authority-unknown` — that role has no entry in `.agentic-sdlc/authorities.json`
-  yet; point back at `lifecycle-onboarding`'s Step 4.
+  yet; point back at `lifecycle-onboarding-github`'s Step 4.
 - `authority-unassigned` — the role exists but has no one assigned; same
   pointer.
 - `no-github-binding` — the assigned person's identity isn't in GitHub-login
@@ -183,6 +183,6 @@ having passed this verification.
   confirmed the repository is public and accepted that gate/approval details
   will be visible there.
 - A created or closed GitHub issue is never itself approval evidence — always
-  correct a human who implies otherwise, and point them at `lifecycle-review`/
+  correct a human who implies otherwise, and point them at `lifecycle-review-generic-github`/
   `lifecycle-review-github` for actually recording a decision.
 - Summarize outcomes in prose after each step.
