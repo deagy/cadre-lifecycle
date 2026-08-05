@@ -1,6 +1,6 @@
 ---
 name: publish-reviewer-nudge-github
-description: Conversationally publish (and idempotently update in place on re-run) an advisory GitHub PR comment suggesting reviewers for a task's lifecycle gates, via publish-reviewer-nudge/list-reviewer-nudge, for a human who does not want to touch a CLI or JSON directly. Use when a user asks to "nudge reviewers on this PR," "post a reviewer suggestion comment," or "let people know who should look at this" for a project already onboarded with lifecycle-onboarding. This posts a SUGGESTION comment only — it is not a formal review request and does not notify anyone; it is unrelated to report-gate-reviewers-github (the read-only report this reuses) and unrelated to publish-gate-status-github (a different comment, a different claim).
+description: Conversationally publish (and idempotently update in place on re-run) an advisory GitHub PR comment suggesting reviewers for a task's lifecycle gates, via publish-reviewer-nudge/list-reviewer-nudge, for a human who does not want to touch a CLI or JSON directly. Use when a user asks to "nudge reviewers on this PR," "post a reviewer suggestion comment," or "let people know who should look at this" for a project already onboarded with lifecycle-onboarding-github. This posts a SUGGESTION comment only — it is not a formal review request and does not notify anyone; it is unrelated to report-gate-reviewers-github (the read-only report this reuses) and unrelated to publish-gate-status-github (a different comment, a different claim).
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree,
@@ -49,7 +49,7 @@ conversation — only ask if genuinely not yet known. Confirm that
 `.agentic-sdlc/runs/<task-id>/run-record.json` already exists (a quick local
 check of whether `.agentic-sdlc/runs/<task-id>/` exists is a reasonable
 first move) — if the project has never been onboarded or planned, point them
-at `lifecycle-onboarding` or `cadre sdlc plan` first.
+at `lifecycle-onboarding-github` or `cadre sdlc plan` first.
 
 Check that the installed `agentic-sdlc` kernel actually has
 `publish-reviewer-nudge`/`list-reviewer-nudge` (run `./bin/cadre sdlc --help`).

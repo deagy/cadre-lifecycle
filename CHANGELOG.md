@@ -15,6 +15,18 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.7.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.7.0) - 2026-08-04
+
+### Changed
+
+- **`cadre-lifecycle-github` and `cadre-lifecycle-gitlab` no longer require a separate `cadre-lifecycle-core` install.** Each now bundles its own copies of `lifecycle-onboarding`, the generic (non-forge) `lifecycle-review`, and `brief-pending-gates`, renamed per plugin (`lifecycle-onboarding-github`/`-gitlab`, `lifecycle-review-generic-github`/`-gitlab`, `brief-pending-gates-github`/`-gitlab`) to avoid a skill-name collision for anyone who installs a forge plugin alongside `cadre-lifecycle-core` anyway, plus its own copy of the kernel bootstrap script (`tools/bootstrap_sdlc.py`). `cadre-lifecycle-core` is unchanged and remains available standalone for forge-agnostic-only use. `provider.json` itself is not duplicated — all three bootstrap-script copies still read the single shared repository-root file.
+- Added `tools/test_plugin_duplication_health.py`, run alongside the existing `tools/` suite, to fail loudly if the duplicated skills or bootstrap script ever drift out of sync across the three plugins — this is the mechanical safeguard for a duplication approach that has no build-time dependency resolution to fall back on (Claude Code/Codex plugin manifests carry no dependency-declaration field).
+- README's "Regenerating Assets" section now documents the extra manual re-sync step this duplication requires after every register regen of `cadre-lifecycle-core`'s skills.
+
+### Fixed
+
+- The initial `cadre-lifecycle-github` duplication left GitLab-only terminology untranslated in three skills — `lifecycle-onboarding-github`, `link-source-issue-github`, and `publish-gate-status-github` referenced a `gitlab-gate-tracking` skill and `gitlab-user-unresolved`/`gitlab-user-ambiguous` reason codes that don't exist in that plugin, instead of their real GitHub equivalents (`create-github-gate-issues`, `github-user-unresolved`). Corrected, along with a `github-user-ambiguous` reason code that was fabricated while fixing the above — GitHub's login lookup is exact-match, unlike GitLab's, so there is no ambiguous-match case to translate. `tools/test_plugin_duplication_health.py` now asserts these GitLab-only tokens can never appear untranslated in a github copy again.
+
 ## [0.6.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.6.0) - 2026-08-04
 
 ### Added

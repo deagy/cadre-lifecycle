@@ -1,6 +1,6 @@
 ---
 name: report-gate-reviewers-gitlab
-description: Conversationally report which GitLab usernames would be set as MR reviewers for a task's lifecycle gates, for a human who does not want to touch a CLI or JSON directly. Use when a user asks "who should review this gate on GitLab," "who do I need to add as a reviewer on this MR," or "check reviewer status for this MR" for a project already onboarded with lifecycle-onboarding. This is read-only/reporting only — it never sets reviewer_ids; use it to prepare what to do manually in the GitLab UI.
+description: Conversationally report which GitLab usernames would be set as MR reviewers for a task's lifecycle gates, for a human who does not want to touch a CLI or JSON directly. Use when a user asks "who should review this gate on GitLab," "who do I need to add as a reviewer on this MR," or "check reviewer status for this MR" for a project already onboarded with lifecycle-onboarding-gitlab. This is read-only/reporting only — it never sets reviewer_ids; use it to prepare what to do manually in the GitLab UI.
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.
@@ -42,7 +42,7 @@ target root (`.` if already working inside it) and confirm
 `.agentic-sdlc/runs/<task-id>/run-record.json` already exists for the task
 (a quick local check of whether `.agentic-sdlc/runs/<task-id>/` exists is a
 reasonable first move) — if the project has never been onboarded or planned,
-point them at the `lifecycle-onboarding` skill (setup) or `cadre sdlc plan`
+point them at the `lifecycle-onboarding-gitlab` skill (setup) or `cadre sdlc plan`
 first.
 
 Check that the installed `agentic-sdlc` kernel actually has
@@ -165,7 +165,7 @@ already-built candidate was withheld):
 
 - `authority-unknown` — that role has no entry in
   `.agentic-sdlc/authorities.json` yet; point back at
-  `lifecycle-onboarding`'s Step 4.
+  `lifecycle-onboarding-gitlab`'s Step 4.
 - `authority-unassigned` — the role exists but has no one assigned; same
   pointer.
 - `no-gitlab-binding` — the assigned person's identity isn't in GitLab

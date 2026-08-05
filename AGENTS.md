@@ -2,10 +2,10 @@
 
 ## Project Structure & Module Organization
 
-This repository combines two independent upstream systems and packages them as **4 separate, independently-installable plugins**: `cadre` (role selection, this repository's root — the only one most projects need) plus 3 optional lifecycle-governance plugins, `cadre-lifecycle-core` (`plugins/lifecycle/`), `cadre-lifecycle-github` (`plugins/lifecycle-github/`), and `cadre-lifecycle-gitlab` (`plugins/lifecycle-gitlab/`), the latter two requiring `cadre-lifecycle-core`.
+This repository combines two independent upstream systems and packages them as **4 separate, independently-installable plugins**: `cadre` (role selection, this repository's root — the only one most projects need) plus 3 optional lifecycle-governance plugins, `cadre-lifecycle-core` (`plugins/lifecycle/`), `cadre-lifecycle-github` (`plugins/lifecycle-github/`), and `cadre-lifecycle-gitlab` (`plugins/lifecycle-gitlab/`) — each self-sufficient and installable in any combination, none requiring another.
 
 - **Cadre** (role selection, plugin `cadre`): 71 specialist roles, routing rules, orchestration runtime. The source of truth for role definitions lives in the independent [deagy/cadre](https://github.com/deagy/cadre) register. Assets here (`agent-catalog.json`, `profiles/`, `extensions/`, `skills/`, `agents/`, `bin/cadre`, and — as of the plugin split — `plugins/lifecycle/skills/`) are generated from that register.
-- **Agentic SDLC** (lifecycle governance, plugins `cadre-lifecycle-core`/`-github`/`-gitlab`): G1–G10 gate schemas, run-record validation, gate authority. External dependency, not vendored — the separately installed `agentic-sdlc` CLI from [deagy/agentic-sdlc](https://github.com/deagy/agentic-sdlc), invoked via `bin/cadre sdlc`. `plugins/lifecycle-github/` and `plugins/lifecycle-gitlab/` are entirely hand-authored here; the register has no concept of them.
+- **Agentic SDLC** (lifecycle governance, plugins `cadre-lifecycle-core`/`-github`/`-gitlab`): G1–G10 gate schemas, run-record validation, gate authority. External dependency, not vendored — the separately installed `agentic-sdlc` CLI from [deagy/agentic-sdlc](https://github.com/deagy/agentic-sdlc), invoked via `bin/cadre sdlc`. `plugins/lifecycle-github/` and `plugins/lifecycle-gitlab/` are entirely hand-authored here (including their own bundled onboarding/gate-review/pending-gates-briefing skill copies and kernel bootstrap script — hand-maintained duplicates of `cadre-lifecycle-core`'s register-generated equivalents, kept in sync via `tools/test_plugin_duplication_health.py`); the register has no concept of them.
 - **Cline plugin** (`cline/`): hand-authored TypeScript plugin exposing the `agents_select` tool call, belonging to the `cadre` plugin.
 
 Keep role definitions and `agent-catalog.json` synchronized when adding or changing agents. Regenerate the packaged plugin from the register before review — see README.md's "Regenerating Assets" for the exact procedure and its hand-authored exceptions (`README.md` itself, `plugins/lifecycle/{.claude-plugin,.codex-plugin,tools}/`, and all of `plugins/lifecycle-github/`, `plugins/lifecycle-gitlab/`).
@@ -33,11 +33,13 @@ For the LangGraph engine:
 cd agentic_sdlc_langgraph && python3 -m unittest discover -s . -p "test_*.py" -v
 ```
 
-For plugin-versioning/release tooling and `cadre-lifecycle-core`'s bootstrap script:
+For plugin-versioning/release tooling and the lifecycle plugins' bootstrap scripts (`cadre-lifecycle-core`'s, plus `cadre-lifecycle-github`'s and `cadre-lifecycle-gitlab`'s own hand-maintained copies):
 
 ```sh
 python3 -m unittest discover -s tools -p "test_*.py" -v
 python3 -m unittest discover -s plugins/lifecycle/tools -p "test_*.py" -v
+python3 -m unittest discover -s plugins/lifecycle-github/tools -p "test_*.py" -v
+python3 -m unittest discover -s plugins/lifecycle-gitlab/tools -p "test_*.py" -v
 ```
 
 ## Coding Style & Naming Conventions

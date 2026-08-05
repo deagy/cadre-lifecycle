@@ -1,6 +1,6 @@
 ---
 name: link-source-issue-github
-description: Conversationally record a real GitHub issue as the recorded source for a task's G1 (Intent) or G2 (Requirements Baseline) gate, via link-intent-from-github-issue/link-requirements-from-github-issue, for a human who does not want to touch a CLI or JSON directly. Use when a user asks to "link this GitHub issue as the source for G1/Intent," "record this issue as the requirements source," or "attach a GitHub issue to G1/G2" for a project already onboarded with lifecycle-onboarding. This only ever applies to G1 or G2, and only records a source, not an approval — for approvals from a GitHub PR review use lifecycle-review-github, and for any other gate use lifecycle-review.
+description: Conversationally record a real GitHub issue as the recorded source for a task's G1 (Intent) or G2 (Requirements Baseline) gate, via link-intent-from-github-issue/link-requirements-from-github-issue, for a human who does not want to touch a CLI or JSON directly. Use when a user asks to "link this GitHub issue as the source for G1/Intent," "record this issue as the requirements source," or "attach a GitHub issue to G1/G2" for a project already onboarded with lifecycle-onboarding-github. This only ever applies to G1 or G2, and only records a source, not an approval — for approvals from a GitHub PR review use lifecycle-review-github, and for any other gate use lifecycle-review-generic-github.
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.
@@ -15,10 +15,10 @@ These commands fetch one real GitHub issue and record it as the recorded
 **This is not approval evidence.** Neither command ever touches
 `human_approvals` or a gate's `status` — recording a source issue link is a
 separate, lower-stakes action than deciding a gate. This mirrors the same
-disclaimer `gitlab-gate-tracking` carries for its own artifacts: closing or
+disclaimer `create-github-gate-issues` carries for its own artifacts: closing or
 commenting on an issue is never itself an approval, and neither is linking
 one as a source. For actually recording a gate decision, use
-`lifecycle-review`/`lifecycle-review-github` instead.
+`lifecycle-review-generic-github`/`lifecycle-review-github` instead.
 
 ## Before you start
 
@@ -27,7 +27,7 @@ conversation — only ask if genuinely not yet known. Confirm that
 `.agentic-sdlc/runs/<task-id>/run-record.json` already exists (a quick local
 check of whether `.agentic-sdlc/runs/<task-id>/` exists is a reasonable
 first move) — if the project has never been onboarded or planned, point them
-at `lifecycle-onboarding` or `cadre sdlc plan` first.
+at `lifecycle-onboarding-github` or `cadre sdlc plan` first.
 
 Check that the installed `agentic-sdlc` kernel actually has
 `link-intent-from-github-issue`/`link-requirements-from-github-issue` (run
@@ -39,7 +39,7 @@ needed and stop.
 Ask which gate this is for. **Only G1 (Intent) and G2 (Requirements
 Baseline) accept a source issue link** — no other gate does. If the human
 names any other gate (G3–G10), tell them plainly this skill only applies to
-G1/G2, and point them at `lifecycle-onboarding` (setup) or `lifecycle-review`
+G1/G2, and point them at `lifecycle-onboarding-github` (setup) or `lifecycle-review-generic-github`
 (recording a decision for any gate) instead. Do not attempt to force a link
 for a gate this skill doesn't cover.
 
@@ -52,7 +52,7 @@ Map their answer to the command you'll use in Step 4:
 
 Read the target gate's `authority_requirements` from
 `.agentic-sdlc/runs/<task-id>/run-record.json`, and ask the human's role in
-plain language (reusing `lifecycle-onboarding`'s Step 4 role table). The
+plain language (reusing `lifecycle-onboarding-github`'s Step 4 role table). The
 kernel only accepts a link from the exact assigned authority for that
 role/gate — do not guess or substitute a different role.
 
@@ -66,7 +66,7 @@ guessing.
 
 This is a one-way, low-ceremony action — it fetches one issue and records
 one link, nothing more — so it does not need a dry-run/apply two-phase flow
-the way `gitlab-gate-tracking` does. But it is still an external-state read
+the way `create-github-gate-issues` does. But it is still an external-state read
 plus a repository-state write, so tell the human plainly, before running
 anything:
 
@@ -110,7 +110,7 @@ show that raw string; translate it:
 - `"<gate> authority role <role> is not applicable"` → that role doesn't
   apply to this gate for this task; re-check with the human.
 - `"authority <role> is not assigned"` → this role has no one assigned yet;
-  point back at `lifecycle-onboarding`'s Step 4.
+  point back at `lifecycle-onboarding-github`'s Step 4.
 - `"unable to fetch GitHub issue for <repo> issue <number>: ..."` → the
   issue doesn't exist, the repo is wrong, or the GitHub API call failed
   (auth, network, rate limit). Tell the human plainly which of these seems
@@ -121,7 +121,7 @@ show that raw string; translate it:
   something looked wrong with the issue data returned and offer to retry.
 - `"unknown gate in run record"` / `"unknown authority role"` → something is
   inconsistent with this task's run record or authorities; do not guess,
-  surface it plainly and suggest checking `lifecycle-onboarding`'s setup.
+  surface it plainly and suggest checking `lifecycle-onboarding-github`'s setup.
 
 A gate other than G1/G2 will never reach this command at all — that's
 handled by Step 1's up-front check, not a runtime error from the kernel.
@@ -132,7 +132,7 @@ handled by Step 1's up-front check, not a runtime error from the kernel.
   ask to see the underlying files or commands.
 - Never fabricate a repository, issue number, task id, or role.
 - A recorded source issue link is never approval evidence — always correct a
-  human who implies otherwise, and point them at `lifecycle-review`/
+  human who implies otherwise, and point them at `lifecycle-review-generic-github`/
   `lifecycle-review-github` for actually recording a gate decision.
 - Relinking replaces the gate's prior recorded source; it does not add a
   second one. Make sure the human understands this before Step 4 if a prior

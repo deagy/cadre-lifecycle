@@ -1,6 +1,6 @@
 ---
 name: gitlab-gate-tracking
-description: Conversationally publish GitLab tracking issues for a task's lifecycle gates, and linked approval-subtask issues assigned to each gate's authority, for a human who does not want to touch a CLI or JSON directly. Use when a user asks to "create GitLab issues for this task's gates," "track approvals in GitLab," "publish gate issues," or "make GitLab subtasks for the approvers" for a project already onboarded with lifecycle-onboarding. This is the opposite direction from lifecycle-review-gitlab: it writes new issues to GitLab, it does not read an existing approval back into the kernel.
+description: Conversationally publish GitLab tracking issues for a task's lifecycle gates, and linked approval-subtask issues assigned to each gate's authority, for a human who does not want to touch a CLI or JSON directly. Use when a user asks to "create GitLab issues for this task's gates," "track approvals in GitLab," "publish gate issues," or "make GitLab subtasks for the approvers" for a project already onboarded with lifecycle-onboarding-gitlab. This is the opposite direction from lifecycle-review-gitlab: it writes new issues to GitLab, it does not read an existing approval back into the kernel.
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.
@@ -20,7 +20,7 @@ This is unrelated to `lifecycle-review-gitlab`: that skill reads an
 decision. This skill only creates tracking issues; **closing or commenting on
 one of these issues is never itself an approval** — the kernel never reads
 them back. Approval still only happens via `agentic-sdlc decide` or
-`approve-from-gitlab`/`approve-from-gitlab-mr` (see `lifecycle-review`/
+`approve-from-gitlab`/`approve-from-gitlab-mr` (see `lifecycle-review-generic-gitlab`/
 `lifecycle-review-gitlab`).
 
 ## Before you start
@@ -30,7 +30,7 @@ conversation — only ask if genuinely not yet known. Confirm that
 `.agentic-sdlc/runs/<task-id>/run-record.json` already exists (a quick local
 check of whether `.agentic-sdlc/runs/<task-id>/` exists is a reasonable
 first move) — if the project has never been onboarded or planned, point them
-at `lifecycle-onboarding` or `cadre sdlc plan` first.
+at `lifecycle-onboarding-gitlab` or `cadre sdlc plan` first.
 
 Check that the installed `agentic-sdlc` kernel actually has
 `create-gate-issues`/`list-gate-issues` (run `./bin/cadre sdlc --help`). If
@@ -110,7 +110,7 @@ and any assignee drift detected on a reused issue (see Step 6).
 Never show raw reason codes; translate them:
 
 - `authority-unknown` — that role has no entry in `.agentic-sdlc/authorities.json`
-  yet; point back at `lifecycle-onboarding`'s Step 4.
+  yet; point back at `lifecycle-onboarding-gitlab`'s Step 4.
 - `authority-unassigned` — the role exists but has no one assigned; same
   pointer.
 - `no-gitlab-binding` — the assigned person's identity isn't in GitLab-username
@@ -148,6 +148,6 @@ proactively.
   the dry-run's assignments first — this is the one hard rule of this skill.
 - Never fabricate a project path, bot username, gate list, or plan digest.
 - A created or closed GitLab issue is never itself approval evidence — always
-  correct a human who implies otherwise, and point them at `lifecycle-review`/
+  correct a human who implies otherwise, and point them at `lifecycle-review-generic-gitlab`/
   `lifecycle-review-gitlab` for actually recording a decision.
 - Summarize outcomes in prose after each step.
