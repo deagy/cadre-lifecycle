@@ -1,0 +1,991 @@
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  type AgentPlugin,
+  type AgentTool,
+  type AgentToolContext,
+  ClineCore,
+  createTool,
+  type ITelemetryService,
+  stripUtf8Bom,
+  type ToolPolicy,
+} from "@cline/sdk";
+import YAML from "yaml";
+import { z } from "zod";
+
+// ---------------------------------------------------------------------------
+// About this plugin
+// ---------------------------------------------------------------------------
+//
+// `cline-agents` is a static, one-time, hand-authored port of this
+// repository's 71 Cadre catalog roles (`agents/*.md`, Claude Code / Codex
+// subagent presets) into Cline SDK agent presets (`agents/*.md` in this
+// plugin, Markdown + YAML frontmatter, one per role). It is a distinct
+// plugin from `cline/` (which exposes the single `agents_select` dispatch
+// -*planning*- tool) -- this plugin actually spawns subagents.
+//
+// Structurally this is an adaptation of the Cline SDK's own
+// `examples/plugins/agents-squad` reference plugin (preset discovery,
+// start/message/get_subagent, handoff store), hardened per this port's
+// threat-modeling pass:
+//   1. Real, not advisory, tool enforcement: each preset's source `tools:`
+//      frontmatter is translated into an explicit deny-by-default
+//      `toolPolicies` map (see `resolveToolPolicyConfig` below), plus a
+//      `mode: "plan"` defense-in-depth guard for genuinely read-only roles.
+//   2. The 71 bundled role names are reserved against silent shadowing by a
+//      global- or project-tier preset of the same name (see
+//      `readAgentDefinitions`).
+//   3. `start_subagent` requires a known `preset` -- it never falls through
+//      to a default/full-tool subagent -- and any caller-supplied `cwd` must
+//      resolve inside the workspace root (see `resolveContainedCwd`).
+//
+// See this plugin's README.md for the full quick-start, tools table, and
+// model-tier table (including an explicit caveat on the unverified `haiku`
+// model id).
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+const BUNDLED_AGENTS_DIR = join(MODULE_DIR, "agents");
+
+function resolveDefaultHomeDir(): string {
+  const envHome = process?.env?.HOME?.trim();
+  if (envHome && envHome !== "~") {
+    return envHome;
+  }
+  const envUserProfile = process?.env?.USERPROFILE?.trim();
+  if (envUserProfile) {
+    return envUserProfile;
+  }
+  const envHomeDrive = process?.env?.HOMEDRIVE?.trim();
+  const envHomePath = process?.env?.HOMEPATH?.trim();
+  if (envHomeDrive && envHomePath) {
+    return `${envHomeDrive}${envHomePath}`;
+  }
+  return "~";
+}
+
+function resolveClineDirPath(): string {
+  const explicitDir = process.env.CLINE_DIR?.trim();
+  if (explicitDir) {
+    return explicitDir;
+  }
+  return join(resolveDefaultHomeDir(), ".cline");
+}
+
+function resolveClineDataDirPath(): string {
+  const explicitDir = process.env.CLINE_DATA_DIR?.trim();
+  if (explicitDir) {
+    return explicitDir;
+  }
+  return join(resolveClineDirPath(), "data");
+}
+
+function resolveGlobalAgentsDirPath(): string {
+  return join(resolveClineDataDirPath(), "settings", "agents");
+}
+
+const HANDOFFS_DIR = join(
+  resolveClineDataDirPath(),
+  "plugins",
+  "cline-agents",
+  "handoffs",
+);
+
+/** Safe identifier pattern for conversation IDs used in filesystem paths. */
+const SAFE_ID_RE = /^[A-Za-z0-9_-]+$/;
+const HANDOFF_PATH_ALLOWED_RE = /^[A-Za-z0-9._/-]+$/;
+const HANDOFF_PATH_MAX_LENGTH = 240;
+
+const envOr = (key: string, fallback: string): string =>
+  process.env[key]?.trim() || fallback;
+
+const DEFAULT_BACKEND_MODE = envOr("CLINE_AGENTS_BACKEND_MODE", "auto");
+type SubagentBackendMode = "auto" | "hub" | "local";
+
+// Tool names (Cline's own canonical builtin tool identifiers -- see
+// packages/core/src/extensions/tools/constants.ts DefaultToolNames) that
+// imply write or command-execution capability. A preset whose allowedTools
+// contains none of these is treated as genuinely read-only for the
+// `mode: "plan"` defense-in-depth guard (settled decision #2).
+const WRITE_OR_EXEC_TOOL_NAMES = new Set([
+  "run_commands",
+  "editor",
+  "apply_patch",
+]);
+
+// ---------------------------------------------------------------------------
+// Agent & Skill definitions
+// ---------------------------------------------------------------------------
+
+interface AgentDefinition {
+  name: string;
+  description?: string;
+  providerId?: string;
+  modelId?: string;
+  systemPrompt: string;
+  cwd?: string;
+  maxIterations?: number;
+  /**
+   * Cline canonical tool names this preset is allowed to use (already
+   * mapped from the source Claude Code tool names at conversion time -- see
+   * cline-agents/agents/*.md frontmatter and the port's conversion script).
+   * Undefined means "no declared restriction" (matches the upstream
+   * agents-squad template's default full-tool behavior for a hand-authored
+   * custom preset that never opted into this field).
+   */
+  allowedTools?: string[];
+  canonicalSource?: string;
+  convertedFrom?: string;
+  source: "bundled" | "global" | "project";
+}
+
+interface SkillDefinition {
+  name: string;
+  description?: string;
+  content: string;
+  source: "bundled" | "global" | "project";
+}
+
+interface RunningSubagent {
+  sessionId: string;
+  parentSessionId?: string;
+  name: string;
+  task: string;
+  preset?: string;
+  startedAt: number;
+  status: "running" | "completed" | "failed";
+  resultText?: string;
+  error?: string;
+  finishReason?: string;
+  completedAt?: number;
+}
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+
+const subagents = new Map<string, RunningSubagent>();
+let sessionManagerPromise: Promise<ClineCore> | undefined;
+
+// ---------------------------------------------------------------------------
+// Frontmatter / directory loading
+// ---------------------------------------------------------------------------
+
+function optStr(v: unknown): string | undefined {
+  return typeof v === "string" && v.trim() ? v.trim() : undefined;
+}
+
+function optInt(v: unknown): number | undefined {
+  return typeof v === "number" && Number.isFinite(v) && v > 0
+    ? Math.floor(v)
+    : undefined;
+}
+
+function optStrArray(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const strs = v.filter((x): x is string => typeof x === "string" && x.trim() !== "");
+  return strs.length ? strs : undefined;
+}
+
+function parseFrontmatter(md: string): {
+  data: Record<string, unknown>;
+  body: string;
+} {
+  // stripUtf8Bom keeps the frontmatter match below working for files saved
+  // with a leading UTF-8 BOM (see cline/cline#12151).
+  md = stripUtf8Bom(md);
+  const m = md.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!m) return { data: {}, body: md.trim() };
+  try {
+    const frontmatter = m[1] ?? "";
+    const body = m[2] ?? "";
+    const parsed = YAML.parse(frontmatter);
+    return {
+      data:
+        parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {},
+      body: body.trim(),
+    };
+  } catch {
+    // Malformed YAML frontmatter -- treat as plain markdown with no metadata.
+    return { data: {}, body: md.trim() };
+  }
+}
+
+function readMarkdownDir(
+  dirPath: string,
+  source: AgentDefinition["source"],
+): Array<{
+  name: string;
+  data: Record<string, unknown>;
+  body: string;
+  source: typeof source;
+}> {
+  if (!existsSync(dirPath)) return [];
+  const results: Array<{
+    name: string;
+    data: Record<string, unknown>;
+    body: string;
+    source: typeof source;
+  }> = [];
+  for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    try {
+      const { data, body } = parseFrontmatter(
+        readFileSync(join(dirPath, entry.name), "utf8"),
+      );
+      if (!body) continue;
+      const name = optStr(data.name) ?? entry.name.replace(/\.md$/, "");
+      results.push({ name, data, body, source });
+    } catch {
+      // Skip unreadable/malformed files rather than failing preset discovery.
+    }
+  }
+  return results;
+}
+
+function toAgentDefinition(entry: {
+  name: string;
+  data: Record<string, unknown>;
+  body: string;
+  source: AgentDefinition["source"];
+}): AgentDefinition {
+  return {
+    name: entry.name,
+    description: optStr(entry.data.description),
+    providerId: optStr(entry.data.providerId),
+    modelId: optStr(entry.data.modelId),
+    systemPrompt: entry.body,
+    cwd: optStr(entry.data.cwd),
+    maxIterations: optInt(entry.data.maxIterations),
+    allowedTools: optStrArray(entry.data.allowedTools),
+    canonicalSource: optStr(entry.data.canonicalSource),
+    convertedFrom: optStr(entry.data.convertedFrom),
+    source: entry.source,
+  };
+}
+
+/**
+ * Load all available agent presets: bundled (this plugin's 71 converted
+ * Cadre roles) plus global and project overlays, in that discovery order.
+ *
+ * Unlike the upstream agents-squad template this port is based on -- whose
+ * discovery precedence lets a project- or global-tier preset silently
+ * override a bundled definition of the same name -- the 71 bundled role
+ * names are reserved. A global- or project-tier file whose frontmatter
+ * `name:` collides with a reserved bundled name is rejected (skipped, with
+ * a warning logged) rather than allowed to override the bundled role's
+ * system prompt and tool policy (settled decision #3).
+ */
+function readAgentDefinitions(baseCwd: string): AgentDefinition[] {
+  const bundled = readMarkdownDir(BUNDLED_AGENTS_DIR, "bundled").map(
+    toAgentDefinition,
+  );
+  const reservedNames = new Set(bundled.map((d) => d.name));
+
+  const defs = new Map<string, AgentDefinition>();
+  for (const d of bundled) defs.set(d.name, d);
+
+  const overlayDirs: Array<{ path: string; source: AgentDefinition["source"] }> = [
+    { path: resolveGlobalAgentsDirPath(), source: "global" },
+    { path: join(baseCwd, ".cline", "agents"), source: "project" },
+  ];
+  for (const { path, source } of overlayDirs) {
+    for (const entry of readMarkdownDir(path, source)) {
+      if (reservedNames.has(entry.name)) {
+        console.error(
+          `[cline-agents] Ignoring ${source}-tier preset "${entry.name}": this name is reserved by ` +
+            `a bundled Cadre role preset and cannot be overridden. Rename the ${source}-tier file's ` +
+            `"name" frontmatter to dispatch it under a distinct identity.`,
+        );
+        continue;
+      }
+      defs.set(entry.name, toAgentDefinition(entry));
+    }
+  }
+  return [...defs.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function readSkillDefinitions(baseCwd: string): SkillDefinition[] {
+  const GLOBAL_SKILLS_DIR = join(resolveClineDataDirPath(), "settings", "skills");
+  const dirs: Array<{ path: string; source: SkillDefinition["source"] }> = [
+    { path: GLOBAL_SKILLS_DIR, source: "global" },
+    { path: join(baseCwd, ".cline", "skills"), source: "project" },
+  ];
+  const defs = new Map<string, SkillDefinition>();
+  for (const { path, source } of dirs) {
+    for (const entry of readMarkdownDir(path, source)) {
+      defs.set(entry.name, {
+        name: entry.name,
+        description: optStr(entry.data.description),
+        content: entry.body,
+        source: entry.source,
+      });
+    }
+  }
+  return [...defs.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// ---------------------------------------------------------------------------
+// Tool policy / mode resolution (settled decision #2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Translate a preset's `allowedTools` into a deny-by-default `toolPolicies`
+ * map, mirroring the shape and "*" wildcard + per-tool override semantics
+ * implemented by `isToolEnabledByPolicies`/`filterToolsByPolicies` in
+ * packages/core/src/runtime/orchestration/runtime-builder.ts: a tool is
+ * enabled only if its own policy (or the "*" fallback) doesn't resolve
+ * `enabled === false`. Setting `"*": { enabled: false }` denies every tool
+ * by default; each name in `allowedTools` gets its own `{ enabled: true }`
+ * override.
+ *
+ * Presets with no declared `allowedTools` return an empty object (no
+ * restriction applied), preserving the upstream template's default
+ * full-tool behavior for a hand-authored custom preset that never opted
+ * into this field.
+ *
+ * Additionally, for a preset whose allowedTools contains none of Cline's
+ * write/exec-capable builtin tools (run_commands, editor, apply_patch --
+ * i.e. it is genuinely read-only), also returns `mode: "plan"` as
+ * defense-in-depth beyond the tool policy alone (an additional hard
+ * command guard -- see packages/core/src/extensions/tools/presets.ts's
+ * "plan" preset and its command-guard-extension.ts hook).
+ */
+function resolveToolPolicyConfig(
+  def: Pick<AgentDefinition, "allowedTools">,
+): { toolPolicies?: Record<string, ToolPolicy>; mode?: "plan" } {
+  if (!def.allowedTools || def.allowedTools.length === 0) {
+    return {};
+  }
+  const toolPolicies: Record<string, ToolPolicy> = { "*": { enabled: false } };
+  for (const toolName of def.allowedTools) {
+    toolPolicies[toolName] = { enabled: true };
+  }
+  const isReadOnly = !def.allowedTools.some((t) => WRITE_OR_EXEC_TOOL_NAMES.has(t));
+  return isReadOnly ? { toolPolicies, mode: "plan" } : { toolPolicies };
+}
+
+// ---------------------------------------------------------------------------
+// cwd containment (settled decision #4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a caller-supplied working directory against `workspaceRoot`,
+ * rejecting (throwing) rather than silently clamping a path that would
+ * escape the workspace root. `undefined`/omitted resolves to the
+ * workspace root itself.
+ */
+function resolveContainedCwd(
+  workspaceRoot: string,
+  requested: string | undefined,
+): string {
+  const candidate = resolve(workspaceRoot, requested ?? ".");
+  const rel = relative(workspaceRoot, candidate);
+  const escapes =
+    rel === ".."
+    || rel.startsWith(`..${sep}`)
+    || (isAbsolute(rel) && rel !== "");
+  if (escapes) {
+    throw new Error(
+      `Requested working directory "${requested}" resolves outside the workspace root ` +
+        `("${workspaceRoot}") and was rejected. Provide a path contained within the workspace.`,
+    );
+  }
+  return candidate;
+}
+
+// ---------------------------------------------------------------------------
+// Session / misc helpers
+// ---------------------------------------------------------------------------
+
+function parentSessionId(ctx: AgentToolContext): string | undefined {
+  const id = ctx.metadata?.sessionId;
+  return typeof id === "string" && id.trim() ? id.trim() : undefined;
+}
+
+function sanitizeConversationId(conversationId: string): string {
+  const trimmed = conversationId.trim();
+  if (!trimmed || !SAFE_ID_RE.test(trimmed)) {
+    throw new Error(`Invalid conversation ID for filesystem use: "${trimmed}"`);
+  }
+  return trimmed;
+}
+
+function handoffsDir(ctx: AgentToolContext): string {
+  const conversationId = ctx.conversationId ?? parentSessionId(ctx);
+  if (!conversationId) {
+    throw new Error("Missing conversation ID for handoff storage");
+  }
+  const safeId = sanitizeConversationId(conversationId);
+  const dir = join(HANDOFFS_DIR, safeId);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function validateHandoffRelativePath(relativePath: string): string {
+  const trimmed = relativePath.trim();
+  if (!trimmed) {
+    throw new Error("Handoff path must not be empty");
+  }
+  if (trimmed.length > HANDOFF_PATH_MAX_LENGTH) {
+    throw new Error(`Handoff path must be ${HANDOFF_PATH_MAX_LENGTH} characters or fewer`);
+  }
+  if (trimmed.startsWith("/")) {
+    throw new Error(`Handoff path must be relative: ${relativePath}`);
+  }
+  if (!HANDOFF_PATH_ALLOWED_RE.test(trimmed)) {
+    throw new Error(
+      "Use a relative file path with letters, numbers, '.', '_', '-', or '/'.",
+    );
+  }
+  if (trimmed.split("/").includes("..")) {
+    throw new Error(`Handoff path must not contain '..': ${relativePath}`);
+  }
+  return trimmed;
+}
+
+function resolveHandoffPath(ctx: AgentToolContext, relativePath: string): string {
+  const handoffPath = validateHandoffRelativePath(relativePath);
+  const dir = handoffsDir(ctx);
+  const resolved = resolve(dir, handoffPath);
+  const pathFromHandoffsDir = relative(dir, resolved);
+  if (
+    !pathFromHandoffsDir
+    || pathFromHandoffsDir === ".."
+    || pathFromHandoffsDir.startsWith(`..${sep}`)
+    || isAbsolute(pathFromHandoffsDir)
+  ) {
+    throw new Error(`Handoff path escapes directory: ${relativePath}`);
+  }
+  return resolved;
+}
+
+function emitSteer(sessionId: string | undefined, prompt: string): void {
+  if (sessionId && prompt.trim()) {
+    globalThis.__clineAgentsPluginHost?.emitEvent?.("steer_message", {
+      sessionId,
+      prompt,
+    });
+  }
+}
+
+async function getSessionManager(): Promise<ClineCore> {
+  sessionManagerPromise ??= ClineCore.create({
+    backendMode: resolveSubagentBackendMode(DEFAULT_BACKEND_MODE),
+  }).catch((err: unknown) => {
+    // Clear the cached promise so subsequent calls can retry.
+    sessionManagerPromise = undefined;
+    throw err;
+  });
+  return sessionManagerPromise;
+}
+
+function resolveSubagentBackendMode(value: string): SubagentBackendMode {
+  switch (value) {
+    case "auto":
+    case "hub":
+    case "local":
+      return value;
+    default:
+      return "auto";
+  }
+}
+
+function extractLastAssistantText(
+  messages: Array<{ role?: string; content?: unknown }>,
+): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant" || !Array.isArray(msg.content)) continue;
+    const text = (msg.content as Array<{ type?: string; text?: unknown }>)
+      .filter((b) => b?.type === "text" && typeof b.text === "string")
+      .map((b) => b.text as string)
+      .join("")
+      .trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function elapsed(start: number, end = Date.now()): string {
+  const s = Math.max(0, Math.floor((end - start) / 1000));
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+function steerPrompt(subagent: RunningSubagent): string {
+  const time = elapsed(subagent.startedAt, subagent.completedAt ?? Date.now());
+  const header =
+    subagent.status === "completed"
+      ? `Sub-agent "${subagent.name}" completed (${time}).`
+      : `Sub-agent "${subagent.name}" failed (${time}).`;
+  const body = subagent.resultText?.trim() || subagent.error?.trim() || "";
+  return [header, body, `Session ID: ${subagent.sessionId}`].filter(Boolean).join("\n\n");
+}
+
+let pluginTelemetry: ITelemetryService | undefined;
+
+async function runSubagentTurn(
+  subagent: RunningSubagent,
+  message: string,
+  steer: boolean,
+): Promise<void> {
+  try {
+    const mgr = await getSessionManager();
+    const result = await mgr.send({ sessionId: subagent.sessionId, prompt: message });
+    const messages = await mgr.readMessages(subagent.sessionId);
+    subagent.status = "completed";
+    subagent.finishReason = result?.finishReason;
+    subagent.resultText = result?.text?.trim() || extractLastAssistantText(messages) || "";
+    subagent.error = undefined;
+    subagent.completedAt = Date.now();
+  } catch (err) {
+    subagent.status = "failed";
+    subagent.error = err instanceof Error ? err.message : String(err);
+    subagent.completedAt = Date.now();
+  }
+  pluginTelemetry?.capture({
+    event: "cline_agents_subagent_turn_completed",
+    properties: {
+      status: subagent.status,
+      preset: subagent.preset,
+      finish_reason: subagent.finishReason,
+    },
+  });
+  pluginTelemetry?.recordHistogram(
+    "cline_agents.subagents.turn_duration_ms",
+    (subagent.completedAt ?? Date.now()) - subagent.startedAt,
+    { status: subagent.status },
+  );
+  if (steer) emitSteer(subagent.parentSessionId, steerPrompt(subagent));
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __clineAgentsPluginHost:
+    | { emitEvent?: (name: string, payload?: unknown) => void }
+    | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Schemas
+// ---------------------------------------------------------------------------
+
+const NonEmptyText = z.string().trim().min(1);
+
+const HandoffPathInput = z
+  .string()
+  .trim()
+  .min(1)
+  .max(240)
+  .describe(
+    "Relative file path using letters, numbers, '.', '_', '-', or '/'. Must not be absolute or contain '..' segments.",
+  );
+
+const StartSubagentInput = z
+  .object({
+    label: NonEmptyText.describe(
+      "Short display label for this run, used in status and completion messages.",
+    ),
+    task: NonEmptyText.describe("Primary task for the subagent. This becomes its first user message."),
+    preset: NonEmptyText.describe(
+      "Required agent preset name from list_agent_presets. Unlike the upstream agents-squad template " +
+        "this is based on, this tool never falls through to a default/full-tool subagent -- a missing or " +
+        "unknown preset is rejected.",
+    ),
+    instructions: NonEmptyText.optional().describe(
+      "Extra system instructions appended after the preset's system prompt. Additive only -- cannot " +
+        "substitute for a missing/unknown preset.",
+    ),
+    providerId: NonEmptyText.optional().describe(
+      "Optional provider override. Defaults to the preset's providerId.",
+    ),
+    modelId: NonEmptyText.optional().describe("Optional model override. Defaults to the preset's modelId."),
+    workingDirectory: NonEmptyText.optional().describe(
+      "Optional working directory. Must resolve within the workspace root -- a path that would escape " +
+        "it (e.g. '../../etc') is rejected, not clamped.",
+    ),
+    maxIterations: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe("Optional hard limit for the subagent turn loop."),
+    notifyParent: z
+      .boolean()
+      .optional()
+      .describe("When true or omitted, send the final outcome back to the parent session."),
+  })
+  .strict();
+
+const MessageSubagentInput = z
+  .object({
+    sessionId: NonEmptyText.describe("Existing subagent session ID."),
+    prompt: NonEmptyText.describe("Follow-up user message to send to the subagent."),
+    notifyParent: z
+      .boolean()
+      .optional()
+      .describe("When true or omitted, send the final outcome back to the parent session."),
+  })
+  .strict();
+
+const GetSubagentInput = z
+  .object({ sessionId: NonEmptyText.describe("Subagent session ID.") })
+  .strict();
+
+const SaveHandoffInput = z
+  .object({
+    path: HandoffPathInput.describe(
+      "Relative path inside the conversation handoff store, for example 'research/notes.md'.",
+    ),
+    content: z.string().describe("Text content to store for later retrieval by this conversation's agents."),
+  })
+  .strict();
+
+const ReadHandoffInput = z
+  .object({ path: HandoffPathInput.describe("Relative path inside the conversation handoff store.") })
+  .strict();
+
+const GetSkillInput = z.object({ name: NonEmptyText.describe("Skill name from list_skills.") }).strict();
+
+// ---------------------------------------------------------------------------
+// Setup and tool registration
+// ---------------------------------------------------------------------------
+
+type SetupFn = NonNullable<AgentPlugin["setup"]>;
+export type SetupApi = Parameters<SetupFn>[0];
+export type SetupContext = Parameters<SetupFn>[1];
+
+// Exported for tests: the pure logic under settled decisions #2/#3/#4 is
+// independently testable without spinning up a real ClineCore backend.
+export {
+  readAgentDefinitions,
+  readSkillDefinitions,
+  resolveToolPolicyConfig,
+  resolveContainedCwd,
+  resolveHandoffPath,
+  validateHandoffRelativePath,
+  HANDOFFS_DIR,
+  type AgentDefinition,
+};
+
+const setup = (api: SetupApi, ctx: SetupContext) => {
+  const logger = ctx.logger;
+  const workspaceRoot = ctx.workspaceInfo?.rootPath;
+  pluginTelemetry = ctx.telemetry;
+
+  logger?.log("cline-agents plugin setup", {
+    workspaceRoot,
+    backendMode: DEFAULT_BACKEND_MODE,
+  });
+  pluginTelemetry?.capture({
+    event: "cline_agents_setup",
+    properties: { backend_mode: DEFAULT_BACKEND_MODE },
+  });
+
+  function requireWorkspaceRoot(): string {
+    if (!workspaceRoot) {
+      throw new Error(
+        "Could not resolve the workspace root from the host session; cline-agents requires a known " +
+          "workspace root and will not fall back to the process's current directory.",
+      );
+    }
+    return workspaceRoot;
+  }
+
+  // -- start_subagent --
+  api.registerTool(
+    createTool({
+      name: "start_subagent",
+      description:
+        "Start a background subagent run from one of this plugin's bundled Cadre role presets (or an " +
+        "accepted global/project override) and return its session ID immediately. `preset` is required " +
+        "-- see list_agent_presets for available names. Use get_subagent to poll, or keep notifyParent " +
+        "enabled to have the result pushed back into the parent session.",
+      inputSchema: z.toJSONSchema(StartSubagentInput),
+      timeoutMs: 60_000,
+      retryable: false,
+      execute: async (rawInput: unknown, toolCtx: AgentToolContext) => {
+        const input = StartSubagentInput.parse(rawInput);
+        const baseCwd = requireWorkspaceRoot();
+        const defs = readAgentDefinitions(baseCwd);
+        const def = defs.find((d) => d.name === input.preset);
+        if (!def) {
+          const available = defs.map((d) => d.name).join(", ");
+          throw new Error(
+            `Unknown agent preset: "${input.preset}". Available presets: ${available || "none"}.`,
+          );
+        }
+
+        const cwd = resolveContainedCwd(baseCwd, input.workingDirectory ?? def.cwd);
+        const providerId = input.providerId ?? def.providerId ?? "anthropic";
+        const modelId = input.modelId ?? def.modelId;
+        if (!modelId) {
+          throw new Error(
+            `Preset "${def.name}" has no modelId and no override was supplied.`,
+          );
+        }
+        const prompt = [def.systemPrompt.trim(), input.instructions?.trim()]
+          .filter(Boolean)
+          .join("\n\n");
+
+        const { toolPolicies, mode } = resolveToolPolicyConfig(def);
+
+        const mgr = await getSessionManager();
+        const { sessionId } = await mgr.start({
+          config: {
+            providerId,
+            modelId,
+            cwd,
+            workspaceRoot: cwd,
+            enableTools: true,
+            enableSpawnAgent: false,
+            enableAgentTeams: false,
+            pluginPaths: [],
+            systemPrompt: prompt,
+            maxIterations: input.maxIterations ?? def.maxIterations,
+            toolPolicies,
+            mode,
+          },
+          interactive: false,
+        });
+
+        const subagent: RunningSubagent = {
+          sessionId,
+          parentSessionId: parentSessionId(toolCtx),
+          name: input.label,
+          task: input.task,
+          preset: def.name,
+          startedAt: Date.now(),
+          status: "running",
+        };
+        subagents.set(sessionId, subagent);
+        logger?.log("Started subagent", {
+          sessionId,
+          toolName: "start_subagent",
+          label: input.label,
+          preset: def.name,
+          providerId,
+          modelId,
+          mode,
+        });
+        pluginTelemetry?.recordCounter("cline_agents.subagents.started", 1, {
+          preset: def.name,
+          provider_id: providerId,
+        });
+        void runSubagentTurn(subagent, input.task, input.notifyParent !== false);
+
+        return {
+          status: "started",
+          sessionId,
+          label: subagent.name,
+          preset: def.name,
+          task: subagent.task,
+        };
+      },
+    }) as AgentTool<unknown, unknown>,
+  );
+
+  // -- list_agent_presets --
+  api.registerTool(
+    createTool({
+      name: "list_agent_presets",
+      description:
+        "List the available subagent presets: the 71 bundled Cadre role presets plus any accepted " +
+        "global/project-level definitions.",
+      inputSchema: z.toJSONSchema(z.object({}).strict()),
+      execute: async (_input: unknown, _toolCtx: AgentToolContext) => {
+        const baseCwd = requireWorkspaceRoot();
+        const agents = readAgentDefinitions(baseCwd).map((a) => ({
+          name: a.name,
+          description: a.description,
+          providerId: a.providerId ?? "anthropic",
+          modelId: a.modelId,
+          source: a.source,
+          allowedTools: a.allowedTools,
+        }));
+        return {
+          agents,
+          text: agents.length
+            ? agents
+                .map(
+                  (a) =>
+                    `- ${a.name} [${a.source}] (${a.providerId}/${a.modelId})${a.description ? `: ${a.description}` : ""}`,
+                )
+                .join("\n")
+            : "No agent definitions found.",
+        };
+      },
+    }) as AgentTool<unknown, unknown>,
+  );
+
+  // -- message_subagent --
+  api.registerTool(
+    createTool({
+      name: "message_subagent",
+      description: "Send a follow-up message to an existing subagent session and return immediately.",
+      inputSchema: z.toJSONSchema(MessageSubagentInput),
+      timeoutMs: 60_000,
+      retryable: false,
+      execute: async (rawInput: unknown, toolCtx: AgentToolContext) => {
+        const input = MessageSubagentInput.parse(rawInput);
+        const mgr = await getSessionManager();
+        const record = await mgr.get(input.sessionId);
+        if (!record) {
+          throw new Error(`Unknown session: ${input.sessionId}`);
+        }
+
+        const subagent: RunningSubagent = subagents.get(input.sessionId) ?? {
+          sessionId: input.sessionId,
+          parentSessionId: parentSessionId(toolCtx),
+          name: input.sessionId,
+          task: input.prompt,
+          startedAt: Date.now(),
+          status: "running",
+        };
+        subagent.parentSessionId = parentSessionId(toolCtx);
+        subagent.task = input.prompt;
+        subagent.status = "running";
+        subagent.error = undefined;
+        subagents.set(subagent.sessionId, subagent);
+
+        logger?.log("Queued subagent follow-up", {
+          sessionId: subagent.sessionId,
+          toolName: "message_subagent",
+          label: subagent.name,
+        });
+        void runSubagentTurn(subagent, input.prompt, input.notifyParent !== false);
+        return {
+          status: "started",
+          sessionId: subagent.sessionId,
+          label: subagent.name,
+          task: subagent.task,
+        };
+      },
+    }) as AgentTool<unknown, unknown>,
+  );
+
+  // -- get_subagent --
+  api.registerTool(
+    createTool({
+      name: "get_subagent",
+      description: "Get the latest status, output, and error details for a subagent session.",
+      inputSchema: z.toJSONSchema(GetSubagentInput),
+      execute: async (rawInput: unknown, _toolCtx: AgentToolContext) => {
+        const input = GetSubagentInput.parse(rawInput);
+        const subagent = subagents.get(input.sessionId);
+        if (!subagent) {
+          return {
+            status: "unknown",
+            sessionId: input.sessionId,
+            text: `No tracked session: ${input.sessionId}`,
+          };
+        }
+        return {
+          status: subagent.status,
+          sessionId: subagent.sessionId,
+          label: subagent.name,
+          task: subagent.task,
+          finishReason: subagent.finishReason,
+          error: subagent.error,
+          text: subagent.resultText ?? (subagent.status === "running" ? "Still running." : ""),
+        };
+      },
+    }) as AgentTool<unknown, unknown>,
+  );
+
+  // -- save_handoff --
+  api.registerTool(
+    createTool({
+      name: "save_handoff",
+      description:
+        "Save text into the conversation handoff store so other subagents in this conversation can read it later.",
+      inputSchema: z.toJSONSchema(SaveHandoffInput),
+      execute: async (rawInput: unknown, toolCtx: AgentToolContext) => {
+        const input = SaveHandoffInput.parse(rawInput);
+        const filePath = resolveHandoffPath(toolCtx, input.path);
+        mkdirSync(dirname(filePath), { recursive: true });
+        writeFileSync(filePath, input.content, "utf8");
+        return { path: filePath, handoffPath: input.path };
+      },
+    }) as AgentTool<unknown, unknown>,
+  );
+
+  // -- read_handoff --
+  api.registerTool(
+    createTool({
+      name: "read_handoff",
+      description: "Read text from the conversation handoff store.",
+      inputSchema: z.toJSONSchema(ReadHandoffInput),
+      execute: async (rawInput: unknown, toolCtx: AgentToolContext) => {
+        const input = ReadHandoffInput.parse(rawInput);
+        const filePath = resolveHandoffPath(toolCtx, input.path);
+        if (!existsSync(filePath)) {
+          throw new Error(`Handoff not found: ${input.path}`);
+        }
+        return { path: filePath, handoffPath: input.path, content: readFileSync(filePath, "utf8") };
+      },
+    }) as AgentTool<unknown, unknown>,
+  );
+
+  // -- list_skills --
+  api.registerTool(
+    createTool({
+      name: "list_skills",
+      description:
+        "List the available skill definitions from global and project-level directories (this plugin " +
+        "ships no bundled skills of its own).",
+      inputSchema: z.toJSONSchema(z.object({}).strict()),
+      execute: async (_input: unknown, _toolCtx: AgentToolContext) => {
+        const baseCwd = requireWorkspaceRoot();
+        const skills = readSkillDefinitions(baseCwd);
+        return {
+          skills: skills.map((s) => ({ name: s.name, description: s.description, source: s.source })),
+          text: skills.length
+            ? skills.map((s) => `- ${s.name} [${s.source}]${s.description ? `: ${s.description}` : ""}`).join("\n")
+            : "No skill definitions found.",
+        };
+      },
+    }) as AgentTool<unknown, unknown>,
+  );
+
+  // -- get_skill --
+  api.registerTool(
+    createTool({
+      name: "get_skill",
+      description: "Get a skill by name, including the instructions that should be followed for that specialization.",
+      inputSchema: z.toJSONSchema(GetSkillInput),
+      execute: async (rawInput: unknown, _toolCtx: AgentToolContext) => {
+        const input = GetSkillInput.parse(rawInput);
+        const baseCwd = requireWorkspaceRoot();
+        const skills = readSkillDefinitions(baseCwd);
+        const skill = skills.find((s) => s.name === input.name);
+        if (!skill) {
+          const available = skills.map((s) => s.name).join(", ");
+          throw new Error(`Unknown skill: "${input.name}". Available: ${available || "none"}`);
+        }
+        return { name: skill.name, description: skill.description, source: skill.source, instructions: skill.content };
+      },
+    }) as AgentTool<unknown, unknown>,
+  );
+};
+
+const plugin: AgentPlugin = {
+  name: "cline-agents",
+  manifest: { capabilities: ["tools"] },
+  setup,
+};
+
+export { plugin };
+export default plugin;

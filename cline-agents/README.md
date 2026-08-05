@@ -1,0 +1,234 @@
+# Cline Agents (Cadre role presets)
+
+A distinct plugin from [`cline/`](../cline) (which only exposes the
+`agents_select` *planning* tool and never spawns anything). This plugin,
+`cline-agents`, is a static, **one-time, hand-authored port** of this
+repository's 71 Cadre catalog roles (`agents/*.md`, the Claude Code / Codex
+subagent presets defined in this repository) into Cline SDK **agent
+presets** that a Cline session can actually dispatch as background
+subagents.
+
+Structurally, this plugin adapts the Cline SDK's own
+[`examples/plugins/agents-squad`](https://github.com/cline/cline) reference
+plugin (preset discovery from Markdown+YAML-frontmatter files, `start_subagent`
+/ `message_subagent` / `get_subagent` / `list_agent_presets` / `list_skills` /
+`get_skill` / `save_handoff` / `read_handoff`), hardened per this port's own
+threat-modeling pass -- see "Hardening vs. the upstream template" below.
+
+## Important: this is a static port, not a live sync
+
+The 71 files under `agents/` were generated **once**, by hand-converting the
+71 role files under this repository's own [`agents/`](../agents) directory
+(the Cadre catalog roles). This plugin does **not** automatically regenerate
+those files when the Cadre register or `agents/*.md` changes.
+
+**Drift risk:** if a role's frontmatter, tools, model tier, or authority text
+changes upstream in `agents/*.md` (or in the independent `deagy/cadre`
+register those files are themselves generated from), the corresponding file
+under `cline-agents/agents/` will silently go stale until someone re-runs the
+(currently unautomated) conversion by hand. Treat this directory as a
+point-in-time snapshot, not a live view of the Cadre catalog.
+
+## Quick start
+
+```ts
+import { ClineCore } from "@cline/sdk";
+
+const cline = await ClineCore.create({ backendMode: "auto" });
+
+await cline.start({
+  config: {
+    providerId: "anthropic",
+    modelId: "anthropic/claude-sonnet-4.6",
+    cwd: process.cwd(),
+    enableTools: true,
+    systemPrompt: "You are a coding assistant with access to Cadre role subagents.",
+    pluginPaths: ["./cline-agents"],
+  },
+  prompt: "Use start_subagent with preset \"security-reviewer\" to review this diff.",
+  interactive: true,
+});
+```
+
+Pass this plugin's **directory** as the path. The loader reads `package.json`
+and discovers the entry point from the `cline.plugins` field.
+
+## Tools
+
+| Tool | Purpose |
+|---|---|
+| `start_subagent` | Start a subagent in the background and return a session ID immediately. **`preset` is required** -- see "Preset-only dispatch" below. |
+| `message_subagent` | Send a follow-up message to a running subagent. |
+| `get_subagent` | Poll status, output, or error for a subagent session. |
+| `list_agent_presets` | List the 71 bundled Cadre role presets plus any accepted global/project overrides. |
+| `list_skills` / `get_skill` | Discover and load loadable skill instructions (global/project only -- this plugin ships no bundled skills of its own). |
+| `save_handoff` / `read_handoff` | Share text between subagents in the same conversation. |
+
+Unlike the upstream `agents-squad` template, `start_subagent` has **no
+default preset**. Every call must name a known preset; there is no
+fallback to a full-tool, unrestricted subagent.
+
+## Model-tier mapping
+
+| Source `model:` tier | `modelId` | `providerId` |
+|---|---|---|
+| `opus` | `anthropic/claude-opus-4.6` | `anthropic` |
+| `sonnet` | `anthropic/claude-sonnet-4.6` | `anthropic` |
+| `haiku` | `anthropic/claude-haiku-4.6` | `anthropic` |
+
+**Caveat on `haiku`:** `anthropic/claude-haiku-4.6` is this port's mapping
+for roles whose source frontmatter declares `model: haiku` (8 of the 71
+roles), but it has **not been independently verified against Cline's actual
+supported/current model catalog** at the time of this port. Operators should
+confirm this model id resolves correctly for their Cline installation before
+relying on any `haiku`-tier preset (`agent-version-control`,
+`approval-router`, `decision-record`, `escalation-manager`,
+`evidence-curator`, `knowledge-store-steward`, `support-triage-agent`,
+`vendor-register-steward`) and substitute a known-good model id via
+`start_subagent`'s `modelId` override if it does not.
+
+The `opus`/`sonnet` mappings follow the same `anthropic/claude-<tier>-4.6`
+naming pattern and were not separately flagged, but were likewise not
+independently verified against a live Cline model catalog.
+
+`providerId: anthropic` (rather than `providerId: cline` with a
+provider-prefixed `modelId`, which is what the upstream `agents-squad`
+example's own bundled presets inconsistently mix -- compare its `anvil.md`
+against `oracle.md`) is a settled convention for this port; it is not
+re-derived from `cline/index.ts`, which never sets a `providerId` at all
+(it only shells out to/invokes the Cadre CLI/bridge and never spawns a
+Cline session itself).
+
+## Hardening vs. the upstream template
+
+This port intentionally departs from `examples/plugins/agents-squad` in
+three ways:
+
+1. **Real, not advisory, tool enforcement.** Each preset's source `tools:`
+   frontmatter (Claude Code tool names: `Read`, `Grep`, `Glob`, `Bash`,
+   `Edit`, `Write`) is translated at conversion time into an `allowedTools`
+   frontmatter field using Cline's own canonical builtin tool names
+   (`read_files`, `search_codebase`, `run_commands`, `editor`). At dispatch
+   time, `resolveToolPolicyConfig` (see `index.ts`) turns that into an
+   explicit deny-by-default `toolPolicies` map --
+   `{ "*": { enabled: false }, <tool>: { enabled: true }, ... }` -- mirroring
+   the exact `"*"`-wildcard-plus-per-tool-override semantics implemented by
+   `isToolEnabledByPolicies`/`filterToolsByPolicies` in
+   `packages/core/src/runtime/orchestration/runtime-builder.ts`. For every
+   role whose `allowedTools` contains none of `run_commands`/`editor`/
+   `apply_patch` (i.e. it is genuinely read-only -- 28 of the 71 roles),
+   `mode: "plan"` is also set as defense-in-depth: an additional hard
+   command guard beyond the tool policy alone (see
+   `packages/core/src/extensions/tools/presets.ts`'s `plan` preset and its
+   command-guard-extension hook).
+2. **Reserved bundled names.** The upstream template's discovery precedence
+   (project > global > bundled, matched by frontmatter `name:`, not
+   filename) lets a project-local `.cline/agents/<anything>.md` silently
+   override a bundled preset. This port reserves the 71 bundled role names:
+   a global- or project-tier file whose `name:` collides with one is
+   rejected outright (skipped, with a clear warning logged), never allowed
+   to override the bundled definition's system prompt or tool policy.
+3. **Preset-only dispatch, containment-checked `cwd`.** `start_subagent`
+   requires `preset` to name a known preset (bundled or an accepted
+   global/project override) -- a missing or unknown preset is rejected, not
+   defaulted. `instructions` remains available as *additional* text appended
+   after the preset's system prompt, but can never substitute for a missing
+   preset. Any caller-supplied `cwd`/`workingDirectory` must resolve to a
+   path within the workspace root (`ctx.workspaceInfo.rootPath`); a path
+   that would escape it (e.g. `../../etc`) is **rejected**, not silently
+   clamped.
+
+## Custom agents and skills
+
+Same discovery model as the upstream template, minus bundled skills and
+minus the ability to shadow a reserved bundled agent name:
+
+| Kind | Bundled | Global | Project |
+|---|---|---|---|
+| Agents | `agents/` next to `index.ts` (71 Cadre roles, reserved names) | `~/.cline/data/settings/agents/` | `<workspaceRoot>/.cline/agents/` |
+| Skills | none shipped | `~/.cline/data/settings/skills/` | `<workspaceRoot>/.cline/skills/` |
+
+## Field mapping (source `agents/*.md` -> `cline-agents/agents/*.md`)
+
+| Source field | Target |
+|---|---|
+| `name` | `name` (verbatim) |
+| `description` | `description` (verbatim) |
+| `model` tier | `modelId` (see table above) |
+| `tools` | Not carried into output frontmatter verbatim (Cline doesn't recognize that field name). Mapped to `allowedTools` (Cline canonical tool names) and consumed for `toolPolicies`/`mode` at dispatch time -- see "Hardening" above. |
+| `effort`, `generated` | Dropped -- no target equivalent, and `generated: true` would be actively misleading (this is a hand-authored port, not live-generated). |
+| `canonical_source` | Kept, renamed `canonicalSource` (inert to Cline's loader; preserved for traceability back to the source register). |
+| *(new)* | `convertedFrom: agents/<role>.md` -- points back at this repository's own source file. |
+| Body | Used as `systemPrompt`, near-verbatim, minus a leading `# Role: <name>` catalog-artifact heading, and with cadre-source-repo-relative path references rewritten (see below). |
+| *(new)* | `maxIterations` left unset for every role -- there is no source-catalog equivalent field, so none was fabricated. |
+
+## Path-reference rewrites
+
+Every one of the 71 source role bodies ends with an identical ~550-line
+appended block (`# Shared policy: roster/shared/<file>` sections --
+operating-principles, team-profile, technology-standards, library-standards,
+knowledge-use-policy, agent-autonomy). That block, and several roles'
+`## Required checks` bullets, contain source-repo-relative path references
+(`` `../../shared/team-profile.yaml` ``, `` `../../review/halt-authority/AGENT.md` ``,
+`roster/shared/README.md`, `roster/knowledge-store/README.md`, etc.) that
+resolve inside the *source* Cadre register/catalog layout but would 404 in
+an arbitrary consumer project's working tree. Those were mechanically
+rewritten into abstract descriptions of the referenced artifact (e.g. "this
+project's technology-standards documentation", "the halt-authority role
+definition") across all 71 files.
+
+Two roles needed a closer look rather than a mechanical rewrite:
+
+- **`application-engineer`** -- this role's entire purpose is maintaining
+  *this cadre-lifecycle source repository's own tooling*
+  (`roster/catalog.yaml`, `roster/orchestration/routing.yaml`,
+  `roster/RUNBOOK.md`, the `cadre generate-plugin`/
+  `cadre generate-role-metadata` regeneration flow, `deagy/cadre-lifecycle`).
+  Those references are the literal subject of the role, not incidental
+  cross-references, so they were left unrewritten and a port note was
+  appended to the preset body explaining that this preset is only
+  meaningful when dispatched against a checkout of the cadre-lifecycle/cadre
+  register repositories themselves -- not an arbitrary consumer project.
+- **`debugging-engineer`** -- one bullet ("When inspecting agents, verify
+  `` `AGENT.md` `` authority, catalog registration, ...") named a
+  cadre-suite-internal filename for an occasional meta-task within an
+  otherwise general-purpose debugging role. That one bullet was reworded to
+  describe "an agent definition's authority, catalog/registry registration,
+  ..." generically rather than naming the literal filename.
+
+No other source-repo-relative path leakage remains in any of the 71
+converted bodies (verified by grepping the output for `roster/`-prefixed
+paths, `../../`-relative paths, and bare `AGENTS.md`/`` `AGENT.md` ``
+references outside the `canonicalSource`/`convertedFrom` frontmatter and the
+two call-outs above).
+
+## Dependencies
+
+`yaml` is declared as a direct dependency (not just relied on transitively)
+because this plugin's own code (`parseFrontmatter` in `index.ts`) calls it
+directly to parse each preset's Markdown frontmatter block. It is already
+present transitively via `@cline/sdk` -> `@cline/core`, which pins `yaml` to
+`^2.8.2`; the direct pin here is kept at `2.9.0` (the version `@cline/core`'s
+range already resolves to) so npm dedupes to a single installed copy instead
+of installing a second nested `yaml` version. `@cline/shared` is *not*
+declared as a direct dependency despite being a dependency of `@cline/core`:
+nothing in this plugin imports from it directly, so it is left to install
+transitively rather than being redundantly pinned here.
+
+## Configuration
+
+| Variable | Default |
+|---|---|
+| `CLINE_AGENTS_BACKEND_MODE` | `auto` (`auto` \| `hub` \| `local`) |
+| `CLINE_DATA_DIR` | `~/.cline/data` |
+| `CLINE_DIR` | `~/.cline` |
+
+## Observability
+
+Same feature-detected `ctx.logger`/`ctx.telemetry` pattern as the upstream
+template: plugin setup, subagent starts, and queued follow-ups are logged;
+a `cline_agents_setup` event, a `cline_agents.subagents.started` counter, a
+`cline_agents_subagent_turn_completed` event, and a
+`cline_agents.subagents.turn_duration_ms` histogram are emitted. Properties
+stay low-cardinality (status, preset, provider) -- never task text or
+subagent output.
