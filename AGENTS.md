@@ -35,12 +35,6 @@ cd cline-agents && npm test
 cd cline-agents && npm run typecheck
 ```
 
-For the LangGraph engine:
-
-```sh
-cd agentic_sdlc_langgraph && python3 -m unittest discover -s . -p "test_*.py" -v
-```
-
 For plugin-versioning/release tooling and the lifecycle plugins' bootstrap scripts (`cadre-lifecycle-core`'s, plus `cadre-lifecycle-github`'s and `cadre-lifecycle-gitlab`'s own hand-maintained copies):
 
 ```sh

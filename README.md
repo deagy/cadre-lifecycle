@@ -27,7 +27,6 @@ flowchart TB
 
 ```
 .                               # cadre plugin's own root
-├── agentic_sdlc_langgraph/    # LangGraph role-dispatch engine (vendored, used by cline/)
 ├── cline/                     # Cline plugin (agents_select tool call)
 ├── cline-agents/              # Cline plugin (71 Cadre role presets, dispatchable subagents)
 ├── bin/cadre                  # CLI dispatcher for role selection (and lifecycle, if installed)
@@ -181,7 +180,7 @@ This project combines two independent upstream systems (see the diagram above fo
 
 | Plugin | Summary | Skills |
 |---|---|---|
-| **`cadre`** | Role definitions/catalog/routing, the `agents_select` Cline tool call, and the LangGraph role-*dispatch* engine (`agentic_sdlc_langgraph/` — never talks to the lifecycle kernel). | — |
+| **`cadre`** | Role definitions/catalog/routing, and the `agents_select` Cline tool call (never talks to the lifecycle kernel). | — |
 | **`cadre-lifecycle-core`** | Forge-agnostic lifecycle governance UX: conversational wrappers around `bin/cadre sdlc` (a thin pass-through to the external kernel), plus a local-only pending-gates briefing and the kernel bootstrap script. | `lifecycle-onboarding`, `lifecycle-review`, `brief-pending-gates` |
 | **`cadre-lifecycle-github`** | GitHub-flavored gate governance: PR-review-sourced decisions, G1/G2 source-issue linking, gate-status PR comments, read-only PR-reviewer reporting, gate/approval tracking issues, and an advisory (never a formal request) reviewer nudge. Self-sufficient — bundles its own onboarding/review/pending-gates skills and kernel bootstrap. Requires `agentic-sdlc` [v0.12.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.12.0)+. | `lifecycle-onboarding-github`, `lifecycle-review-github`, `lifecycle-review-generic-github`, `brief-pending-gates-github`, `link-source-issue-github`, `publish-gate-status-github`, `report-gate-reviewers-github`, `create-github-gate-issues`, `publish-reviewer-nudge-github` |
 | **`cadre-lifecycle-gitlab`** | GitLab-flavored gate governance: MR-approval-sourced decisions, G1/G2 source-issue linking, gate-status MR notes, read-only MR-reviewer reporting, and gate/approval tracking issues. Self-sufficient — bundles its own onboarding/review/pending-gates skills and kernel bootstrap. Requires `agentic-sdlc` [v0.12.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.12.0)+. | `lifecycle-onboarding-gitlab`, `lifecycle-review-gitlab`, `lifecycle-review-generic-gitlab`, `brief-pending-gates-gitlab`, `link-source-issue-gitlab`, `publish-gate-status-gitlab`, `report-gate-reviewers-gitlab`, `gitlab-gate-tracking` |
@@ -200,9 +199,6 @@ cd cline && npm test
 cd cline-agents && npm test
 cd cline-agents && npm run typecheck
 
-# LangGraph role-dispatch engine tests (cadre)
-cd agentic_sdlc_langgraph && python3 -m unittest discover -s . -p "test_*.py" -v
-
 # Plugin versioning/release tooling tests (cadre)
 python3 -m unittest discover -s tools -p "test_*.py" -v
 
@@ -216,7 +212,7 @@ python3 -m unittest discover -s plugins/lifecycle-gitlab/tools -p "test_*.py" -v
 
 ### Regenerating Assets
 
-**`cadre generate-plugin --output` is not safe to run directly against this repository.** The register (`deagy/cadre`) split its own downstream plugin distribution out into a separate repository at some point before this repository's pinned `cadre-ref.txt` revision — originally `deagy/cadre-plugin`, now archived and superseded by this repository — and its generator writes `README.md` from a template (`packaging/plugin-README.md`) describing a different, single-plugin `cadre`/`agentic-sdlc` structure with its own versioning and install instructions, not this repository's actual merged Cadre + Agentic SDLC + Cline + LangGraph identity split across 4 plugins. That template now names `deagy/cadre-lifecycle` as its own "this repository" row, since it was updated to point at the current successor, but its *structure* still describes the old single-plugin shape — the register has no concept of this repository's 4-plugin split at all.
+**`cadre generate-plugin --output` is not safe to run directly against this repository.** The register (`deagy/cadre`) split its own downstream plugin distribution out into a separate repository at some point before this repository's pinned `cadre-ref.txt` revision — originally `deagy/cadre-plugin`, now archived and superseded by this repository — and its generator writes `README.md` from a template (`packaging/plugin-README.md`) describing a different, single-plugin `cadre`/`agentic-sdlc` structure with its own versioning and install instructions, not this repository's actual merged Cadre + Agentic SDLC + Cline identity split across 4 plugins. That template now names `deagy/cadre-lifecycle` as its own "this repository" row, since it was updated to point at the current successor, but its *structure* still describes the old single-plugin shape — the register has no concept of this repository's 4-plugin split at all.
 
 Everything else the register generates (`skills/`, `agents/`, `codex-agents/`, `suite/`, `agent-catalog.json`, `bin/cadre`, `profiles/`, `extensions/`, and — as of the plugin split — `plugins/lifecycle/skills/`) is role/routing content, not repository-identity prose, so it stays correct. Hand-authored exceptions, never touched by regeneration:
 

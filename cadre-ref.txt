@@ -18,8 +18,8 @@
 # the register's own downstream-distribution template: the register's
 # README template (packaging/plugin-README.md, formerly rendered into the
 # now-archived deagy/cadre-plugin) describes a different, single-plugin
-# repository identity, not this one's merged Cadre + Agentic SDLC + Cline +
-# LangGraph identity, so it is deliberately excluded from regeneration.
+# repository identity, not this one's merged Cadre + Agentic SDLC + Cline
+# identity, so it is deliberately excluded from regeneration.
 #
 # To pick up register changes: update this ref and commit the regenerated diff
 # in the same pull request.
