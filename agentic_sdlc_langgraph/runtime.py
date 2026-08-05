@@ -69,18 +69,33 @@ class DispatchRequest:
     repository," not a stand-in for "unknown."""
 
     def validate(self) -> list[str]:
-        """Return a list of validation errors (empty if valid)."""
+        """Return a list of validation errors (empty if valid).
+
+        Deliberately does NOT re-validate `classification` against the
+        allowed-taxonomy set here. That check has a real authoritative home:
+        `build_dispatch_plan.py`'s `_build_knowledge_context()` (the CLI's
+        own dispatch path, which both DispatchAdapters ultimately call —
+        NativeDispatchAdapter directly, FallbackDispatchAdapter via
+        subprocess), which only enforces `classification in CLASSIFICATIONS`
+        once a task actually selects at least one agent; a `needs-triage`
+        task with no matched route or risk short-circuits before that check
+        and never requires a valid classification at all. `validate()` runs
+        here at parse time, before routing has happened, so it cannot know
+        in advance whether the task will select an agent — reintroducing an
+        unconditional classification-format check at this layer previously
+        caused this validate() to reject `needs-triage` requests that the
+        CLI (`cadre select`, the reference/fallback implementation) accepts,
+        a bridge/CLI divergence for the identical input. Keep this deferral
+        rather than re-deriving a second hardcoded classification set here:
+        see test_runtime.py's
+        TestClassificationValidationParity for the regression coverage that
+        would catch this drifting out of sync again.
+        """
         errors: list[str] = []
         if not self.task or not self.task.strip():
             errors.append("'task' is required and must be non-empty")
         if self.base and self.files:
             errors.append("--base cannot be combined with --files")
-        valid_classifications = {"public", "internal", "confidential", "restricted"}
-        if self.classification and self.classification not in valid_classifications:
-            errors.append(
-                f"'classification' must be one of {sorted(valid_classifications)}, "
-                f"got {self.classification!r}"
-            )
         return errors
 
 

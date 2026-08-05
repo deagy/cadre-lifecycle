@@ -11,7 +11,13 @@ import { plugin, runPythonBridge, type SetupApi, type SetupContext } from "./ind
 const execFileAsync = promisify(execFile);
 
 const PLUGIN_DIR = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(PLUGIN_DIR, "..", "..");
+// One level up, not two: cline/ is this plugin root's direct child, matching
+// index.ts's own PLUGIN_DIR/CADRE_BIN resolution. Two levels up used to land
+// on the multi-project workspace root (/home/deagy/sdk) rather than this
+// repository -- harmless only because every REPO_ROOT-based test below
+// happens to pass an explicit `files` argument, bypassing the git-status
+// discovery path that would otherwise hit the workspace root's git state.
+const REPO_ROOT = path.resolve(PLUGIN_DIR, "..");
 
 async function registerTools(workspaceRootPath: string | undefined) {
   const tools: AgentTool[] = [];
