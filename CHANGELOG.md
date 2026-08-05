@@ -15,11 +15,17 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [Unreleased]
+
+### Fixed
+
+- **`cline-agents/` was undiscoverable from this repository's own top-level docs.** It ships a full Cline plugin (own `package.json`, `npm test`/`npm run typecheck`, 71 dispatchable Cadre role presets) but was mentioned nowhere in README.md's Repository Layout tree or "Running Tests" list, nor in AGENTS.md's component description or command list. Added a `cline-agents/` row to README's layout tree and test commands, and an equivalent component description and test commands to AGENTS.md (the file CLAUDE.md points to as authoritative for commands, so not duplicated there).
+
 ## [0.7.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.7.0) - 2026-08-04
 
 ### Changed
 
-- **`cadre-lifecycle-github` and `cadre-lifecycle-gitlab` no longer require a separate `cadre-lifecycle-core` install.** Each now bundles its own copies of `lifecycle-onboarding`, the generic (non-forge) `lifecycle-review`, and `brief-pending-gates`, renamed per plugin (`lifecycle-onboarding-github`/`-gitlab`, `lifecycle-review-generic-github`/`-gitlab`, `brief-pending-gates-github`/`-gitlab`) to avoid a skill-name collision for anyone who installs a forge plugin alongside `cadre-lifecycle-core` anyway, plus its own copy of the kernel bootstrap script (`tools/bootstrap_sdlc.py`). `cadre-lifecycle-core` is unchanged and remains available standalone for forge-agnostic-only use. `provider.json` itself is not duplicated — all three bootstrap-script copies still read the single shared repository-root file.
+- **`cadre-lifecycle-github` and `cadre-lifecycle-gitlab` no longer require a separate `cadre-lifecycle-core` install.** Each now bundles its own renamed copies of `lifecycle-onboarding`, the generic `lifecycle-review`, and `brief-pending-gates` (`-github`/`-gitlab` suffixed, to avoid a skill-name collision if installed alongside `cadre-lifecycle-core` anyway), plus its own copy of the kernel bootstrap script. `cadre-lifecycle-core` is unchanged and remains available standalone. `provider.json` itself is not duplicated — all three bootstrap-script copies still read the single shared repository-root file.
 - Added `tools/test_plugin_duplication_health.py`, run alongside the existing `tools/` suite, to fail loudly if the duplicated skills or bootstrap script ever drift out of sync across the three plugins — this is the mechanical safeguard for a duplication approach that has no build-time dependency resolution to fall back on (Claude Code/Codex plugin manifests carry no dependency-declaration field).
 - README's "Regenerating Assets" section now documents the extra manual re-sync step this duplication requires after every register regen of `cadre-lifecycle-core`'s skills.
 
@@ -31,7 +37,7 @@ below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/rel
 
 ### Added
 
-- **`brief-pending-gates`** (`cadre-lifecycle-core`) — a local-only, forge-agnostic briefing of a task's pending lifecycle gates: which gate(s) are still awaiting a decision and which authority role/person is required for each. Composes the existing `agentic-sdlc status` output with direct `run-record.json` (`authority_requirements`) and `authorities.json` (assignee) reads — it does not modify `gate_status_projection()` or add any kernel code, preserving that read path's identity-minimization boundary. Aimed at teams recording approvals via plain `agentic-sdlc decide` rather than a GitHub/GitLab review flow, who otherwise have no equivalent to `report-gate-reviewers-*`/`publish-gate-status-*`'s pending-reviewer visibility. No new `agentic-sdlc` kernel version is required for this skill.
+- **`brief-pending-gates`** (`cadre-lifecycle-core`) — a local-only, forge-agnostic briefing of a task's pending lifecycle gates: which gate(s) are still awaiting a decision and which authority role/person is required for each. Composes existing `agentic-sdlc status` output with direct `run-record.json`/`authorities.json` reads, without modifying `gate_status_projection()` or adding kernel code. Aimed at teams recording approvals via plain `agentic-sdlc decide` rather than a GitHub/GitLab review flow, who otherwise have no equivalent to `report-gate-reviewers-*`/`publish-gate-status-*`'s pending-reviewer visibility. No new kernel version required.
 
 ### Changed
 

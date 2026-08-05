@@ -6,13 +6,22 @@ This repository packages **Cadre role selection** and **Agentic SDLC lifecycle g
 
 This repository merges the role-selection capabilities of [Cadre](https://github.com/deagy/cadre) with the lifecycle governance of [Agentic SDLC](https://github.com/deagy/agentic-sdlc), and packages them as separate plugins rather than one bundle:
 
-- **`cadre`** — **71 specialist agent roles** with deterministic routing, plus the **Cline plugin** (`agents_select` tool call) for agent dispatch. Install this on its own for role selection with no lifecycle governance at all.
-- **`cadre-lifecycle-core`** (optional) — forge-agnostic **G1–G10 lifecycle gates** for governed software delivery: conversational onboarding and gate-decision skills, plus a kernel bootstrap script.
-- **`cadre-lifecycle-github`** / **`cadre-lifecycle-gitlab`** (optional) — forge-flavored gate governance: record a gate decision from a real PR review/MR approval instead of a generic evidence citation, link a G1/G2 source issue, publish a one-way gate-status summary comment on the task's PR/MR, publish tracking issues for gates and approvals assigned to each gate's authority, and report (read-only) which people would be asked to review. `cadre-lifecycle-github` additionally posts an advisory (never a formal request) reviewer-nudge PR comment. Each bundles its own onboarding, generic gate-review, and pending-gates-briefing skills plus its own kernel bootstrap script, so it does not require `cadre-lifecycle-core`.
+```mermaid
+flowchart TB
+    subgraph repo["This repository — pick any combination"]
+        cadre["cadre\nrole selection\n(most projects only need this)"]
+        core["cadre-lifecycle-core\nforge-agnostic G1-G10 UX"]
+        gh["cadre-lifecycle-github\nGitHub-flavored gate governance"]
+        gl["cadre-lifecycle-gitlab\nGitLab-flavored gate governance"]
+    end
+    kernel[["agentic-sdlc kernel\n(external, installed separately)"]]
 
-Installing `cadre-lifecycle-core` alongside a forge plugin is redundant — both ship an onboarding/review/pending-gates skill set, though the two are namespaced distinctly by suffixed skill names — but harmless.
+    core -- "bin/cadre sdlc" --> kernel
+    gh -- "bin/cadre sdlc" --> kernel
+    gl -- "bin/cadre sdlc" --> kernel
+```
 
-The **LangGraph orchestration engine** (`agentic_sdlc_langgraph/`) is role-dispatch code used by the Cline plugin, not lifecycle-gate execution — it ships as part of `cadre` despite its name (see "Architecture" below).
+`cadre`, `cadre-lifecycle-core`, `cadre-lifecycle-github`, and `cadre-lifecycle-gitlab` are 4 separate plugin manifests — install only what you need. The 3 lifecycle plugins are each self-sufficient (no plugin requires another) and only become useful once the external `agentic-sdlc` kernel is installed (typically via one of their bundled bootstrap scripts — see "Lifecycle Governance with Agentic SDLC" below). Installing `cadre-lifecycle-core` alongside a forge plugin is redundant — both ship an onboarding/review/pending-gates skill set, namespaced distinctly by suffixed skill names — but harmless.
 
 ## Repository Layout
 
@@ -20,6 +29,7 @@ The **LangGraph orchestration engine** (`agentic_sdlc_langgraph/`) is role-dispa
 .                               # cadre plugin's own root
 ├── agentic_sdlc_langgraph/    # LangGraph role-dispatch engine (vendored, used by cline/)
 ├── cline/                     # Cline plugin (agents_select tool call)
+├── cline-agents/              # Cline plugin (71 Cadre role presets, dispatchable subagents)
 ├── bin/cadre                  # CLI dispatcher for role selection (and lifecycle, if installed)
 ├── agent-catalog.json         # Agent role catalog (generated)
 ├── provider.json              # Agentic SDLC provider bundle (referenced by plugins/lifecycle/)
@@ -51,7 +61,7 @@ Install `cadre` for role selection. Only add the lifecycle plugins if you actual
 
 ### Cline
 
-Cline installs one plugin per repository clone/URL; this repository's Cline component (`agents_select`) belongs entirely to `cadre` (the lifecycle plugins have no Cline tool — they're skill-only), so there's nothing forge- or lifecycle-specific to select here:
+Cline installs one plugin per repository clone/URL. The `agents_select` tool call belongs entirely to `cadre` (the lifecycle plugins are skill-only, no Cline tool), so there's nothing else to select here:
 
 ```sh
 cline plugin install --git https://github.com/deagy/cadre-lifecycle --force
@@ -107,7 +117,7 @@ codex plugin add cadre-lifecycle-gitlab@cadre-lifecycle-team
 
 ## Using the `agents_select` Tool Call
 
-The `agents_select` tool call provides deterministic agent dispatch from the Cadre catalog. It returns a plan (routes, primary/reviewer/support roles, quality gates) without invoking agents or mutating state.
+The `agents_select` tool call provides deterministic agent dispatch from the Cadre catalog. It returns a plan (routes, primary/reviewer/support roles, quality gates) without invoking agents or mutating state. See [`cline/README.md`](cline/README.md) for full detail.
 
 ```typescript
 // Example tool call
@@ -162,21 +172,21 @@ The LangGraph engine drives tasks through the lifecycle as a compiled graph, wit
 
 ## Architecture
 
-This project combines two independent upstream systems, packaged here as 4 plugins:
+This project combines two independent upstream systems (see the diagram above for how the resulting 4 plugins relate):
 
 | Component | Source | Responsibility |
 |---|---|---|
 | **Cadre Register** | [deagy/cadre](https://github.com/deagy/cadre) | Role definitions, catalog, routing (independent, not vendored) |
 | **Agentic SDLC Kernel** | [deagy/agentic-sdlc](https://github.com/deagy/agentic-sdlc) | Lifecycle gates, run-record validation, gate authority (external dependency, not vendored) |
 
-| Plugin | Owns |
-|---|---|
-| **`cadre`** | Role definitions/catalog/routing, the `agents_select` Cline tool call, and the LangGraph role-dispatch engine (`agentic_sdlc_langgraph/` — despite the name, this wraps role *dispatch*, not gate execution; it never talks to the lifecycle kernel). |
-| **`cadre-lifecycle-core`** | Forge-agnostic lifecycle governance UX: `lifecycle-onboarding`/`lifecycle-review` skills (conversational wrappers around `bin/cadre sdlc`, itself a thin pass-through to the external kernel), `brief-pending-gates` (a local-only, read-only briefing of which gate is pending and who needs to decide it, for teams not using a GitHub/GitLab review flow), and the kernel bootstrap script. |
-| **`cadre-lifecycle-github`** | GitHub-flavored gate governance: `lifecycle-onboarding-github`/`lifecycle-review-generic-github`/`brief-pending-gates-github` (bundled onboarding, generic gate-review, and pending-gates-briefing skills); `lifecycle-review-github` records decisions (`approve-from-github`/`approve-from-github-pr`); `link-source-issue-github` records a G1/G2 source issue (`link-intent-from-github-issue`/`link-requirements-from-github-issue`); `publish-gate-status-github` publishes a one-way gate-status PR comment (`publish-gate-status`); `report-gate-reviewers-github` reports PR-reviewer candidates, read-only (`request-gate-reviewers`); `create-github-gate-issues` publishes GitHub tracking issues for gates and approvals, assigned to each gate's authority (`create-github-gate-issues`/`list-github-gate-issues`); `publish-reviewer-nudge-github` posts an advisory (not a request) PR comment nudging reviewer candidates (`publish-reviewer-nudge`). Bundles its own onboarding/gate-decision/pending-gates-briefing skills and kernel bootstrap — does not require `cadre-lifecycle-core`. Requires an `agentic-sdlc` kernel at [v0.12.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.12.0) or later. |
-| **`cadre-lifecycle-gitlab`** | GitLab-flavored gate governance: `lifecycle-onboarding-gitlab`/`lifecycle-review-generic-gitlab`/`brief-pending-gates-gitlab` (bundled onboarding, generic gate-review, and pending-gates-briefing skills); `lifecycle-review-gitlab` records decisions (`approve-from-gitlab`/`approve-from-gitlab-mr`); `gitlab-gate-tracking` publishes GitLab tracking issues for gates and approvals, assigned to each gate's authority (`create-gate-issues`/`list-gate-issues`); `link-source-issue-gitlab` records a G1/G2 source issue (`link-intent-from-gitlab-issue`/`link-requirements-from-gitlab-issue`); `publish-gate-status-gitlab` publishes a one-way gate-status MR comment (`publish-gate-status`); `report-gate-reviewers-gitlab` reports MR-reviewer candidates, read-only (`request-gate-reviewers-gitlab`). Bundles its own onboarding/gate-decision/pending-gates-briefing skills and kernel bootstrap — does not require `cadre-lifecycle-core`. Requires an `agentic-sdlc` kernel at [v0.12.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.12.0) or later. |
+| Plugin | Summary | Skills |
+|---|---|---|
+| **`cadre`** | Role definitions/catalog/routing, the `agents_select` Cline tool call, and the LangGraph role-*dispatch* engine (`agentic_sdlc_langgraph/` — never talks to the lifecycle kernel). | — |
+| **`cadre-lifecycle-core`** | Forge-agnostic lifecycle governance UX: conversational wrappers around `bin/cadre sdlc` (a thin pass-through to the external kernel), plus a local-only pending-gates briefing and the kernel bootstrap script. | `lifecycle-onboarding`, `lifecycle-review`, `brief-pending-gates` |
+| **`cadre-lifecycle-github`** | GitHub-flavored gate governance: PR-review-sourced decisions, G1/G2 source-issue linking, gate-status PR comments, read-only PR-reviewer reporting, gate/approval tracking issues, and an advisory (never a formal request) reviewer nudge. Self-sufficient — bundles its own onboarding/review/pending-gates skills and kernel bootstrap. Requires `agentic-sdlc` [v0.12.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.12.0)+. | `lifecycle-onboarding-github`, `lifecycle-review-github`, `lifecycle-review-generic-github`, `brief-pending-gates-github`, `link-source-issue-github`, `publish-gate-status-github`, `report-gate-reviewers-github`, `create-github-gate-issues`, `publish-reviewer-nudge-github` |
+| **`cadre-lifecycle-gitlab`** | GitLab-flavored gate governance: MR-approval-sourced decisions, G1/G2 source-issue linking, gate-status MR notes, read-only MR-reviewer reporting, and gate/approval tracking issues. Self-sufficient — bundles its own onboarding/review/pending-gates skills and kernel bootstrap. Requires `agentic-sdlc` [v0.12.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.12.0)+. | `lifecycle-onboarding-gitlab`, `lifecycle-review-gitlab`, `lifecycle-review-generic-gitlab`, `brief-pending-gates-gitlab`, `link-source-issue-gitlab`, `publish-gate-status-gitlab`, `report-gate-reviewers-gitlab`, `gitlab-gate-tracking` |
 
-The Cadre register remains the source of truth for role definitions, and (as of this split) also generates `cadre-lifecycle-core`'s three skills into `plugins/lifecycle/skills/` — see `cadre-ref.txt`. `cadre-lifecycle-github`/`cadre-lifecycle-gitlab` are entirely hand-authored here; the register has no concept of them, including no concept of their bundled `lifecycle-onboarding-<forge>`/`lifecycle-review-generic-<forge>`/`brief-pending-gates-<forge>` copies, which are hand-maintained duplicates of `cadre-lifecycle-core`'s register-generated skills and must be kept in sync with them; `tools/test_plugin_duplication_health.py` (added by a parallel implementation pass) enforces that sync. Assets in this repository are generated from the register — see "Regenerating Assets" below for the safe procedure; `cadre generate-plugin --output` cannot be run directly against this repository.
+The Cadre register remains the source of truth for role definitions, and (as of this split) also generates `cadre-lifecycle-core`'s three skills into `plugins/lifecycle/skills/` — see `cadre-ref.txt`. `cadre-lifecycle-github`/`cadre-lifecycle-gitlab` are entirely hand-authored here; the register has no concept of them, including their bundled onboarding/review/pending-gates skill copies, which are hand-maintained duplicates of `cadre-lifecycle-core`'s register-generated skills kept in sync via `tools/test_plugin_duplication_health.py`. Assets in this repository are generated from the register — see "Regenerating Assets" below for the safe procedure; `cadre generate-plugin --output` cannot be run directly against this repository.
 
 ## Development
 
@@ -185,6 +195,10 @@ The Cadre register remains the source of truth for role definitions, and (as of 
 ```sh
 # Cline plugin tests (cadre)
 cd cline && npm test
+
+# Cline Agents plugin tests (71 Cadre role presets)
+cd cline-agents && npm test
+cd cline-agents && npm run typecheck
 
 # LangGraph role-dispatch engine tests (cadre)
 cd agentic_sdlc_langgraph && python3 -m unittest discover -s . -p "test_*.py" -v
@@ -233,24 +247,11 @@ python3 tools/plugin_version.py --set 0.3.0
 
 Pushing that bump to `main` triggers [`.github/workflows/release.yml`](.github/workflows/release.yml), which tags the commit (`vMAJOR.MINOR.PATCH`) and publishes a GitHub Release with that version's `CHANGELOG.md` entry as its notes. Don't tag or create the Release by hand for a version bump landing on `main` — the workflow does it (and is idempotent: it checks whether the tag already exists before doing anything, so a re-run or an accidental manual tag is a safe no-op, not a duplicate).
 
-See [Releases](https://github.com/deagy/cadre-lifecycle/releases) for the full history, or jump to a specific version:
+See [Releases](https://github.com/deagy/cadre-lifecycle/releases) or [CHANGELOG.md](CHANGELOG.md) for the full history. Recent highlights:
 
 - [v0.7.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.7.0) — Make `cadre-lifecycle-github`/`-gitlab` self-sufficient: each bundles its own onboarding/generic-review/pending-gates skills and kernel bootstrap script, no longer requiring `cadre-lifecycle-core`
 - [v0.6.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.6.0) — Add `brief-pending-gates` (local-only, forge-agnostic pending-gate briefing); tighten context-reuse wording across all 11 forge skills
 - [v0.5.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.5.0) — Add 3 skills: GitHub gate-issue tracking, an advisory (non-request) reviewer nudge, and read-only GitLab reviewer-candidate reporting
-- [v0.4.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.4.0) — Add 6 skills: source-issue linking, gate-status PR/MR comments (both forges), read-only reviewer-candidate reporting (GitHub); onboarding identity preflight
-- [v0.3.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.2) — Update `gitlab-gate-tracking`'s kernel-release caveat now that `agentic-sdlc` v0.10.0 ships `create-gate-issues`
-- [v0.3.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.1) — Add `gitlab-gate-tracking` skill: publish GitLab tracking issues for gates/approvals, assigned to each gate's authority
-- [v0.3.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.3.0) — Split into 4 plugins: `cadre` (renamed from `cadre-lifecycle`) plus optional `cadre-lifecycle-core`/`-github`/`-gitlab`
-- [v0.2.5](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.5) — Add `.github/workflows/release.yml` to auto-tag and auto-publish on a version bump
-- [v0.2.4](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.4) — Fix stale v0.1.0 install pins in Claude Code / Codex CLI instructions
-- [v0.2.3](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.3) — Link GitHub Releases from README.md and CHANGELOG.md
-- [v0.2.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.2) — Fix `agents_select` tool declaration breaking on every call in real Cline hosts
-- [v0.2.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.1) — Fix unsafe `cadre generate-plugin --output` guidance
-- [v0.2.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.2.0) — Add `tools/bootstrap_sdlc.py` for one-command kernel install
-- [v0.1.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.1.2) — Fix Cline install warning and Codex marketplace name collision
-- [v0.1.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.1.1) — Fix `agents_select` native LangGraph bridge path resolution
-- [v0.1.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.1.0) — Renamed and merged `cadre-agentic-sdlc` into `cadre-lifecycle`
 
 ## License
 
