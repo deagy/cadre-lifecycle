@@ -167,7 +167,7 @@ agentic-sdlc plan --task "Implement user authentication" --profile secure-cloud
 agentic-sdlc validate --task <task-id>
 ```
 
-The LangGraph engine drives tasks through the lifecycle as a compiled graph, with author/reviewer dispatch, gate sequencing, and separation-of-duties enforcement as graph control flow.
+The kernel's LangGraph engine drives tasks through the lifecycle as a compiled graph, with author/reviewer dispatch, gate sequencing, and separation-of-duties enforcement as graph control flow.
 
 ## Architecture
 

@@ -24,7 +24,7 @@ below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/rel
   `cline/index.ts` now has a single execution path: it always shells out to
   this repository's own `bin/cadre select` CLI, the same code path every
   other consumer (Codex, `cline-agents/`, `bin/cadre` itself) already uses.
-  This drops `cline/index.ts` from 555 to 179 lines — the file-path
+  This drops `cline/index.ts` from 554 to 179 lines — the file-path
   resolution, `child.stdin` handling, response-envelope translation,
   validation-message reconciliation, and `SIGKILL` timer-escalation logic
   that the native path required (see the [0.1.1] entry below for the bug

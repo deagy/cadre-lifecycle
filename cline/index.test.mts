@@ -116,10 +116,10 @@ describe("cadre plugin", () => {
     const tools = await registerTools(REPO_ROOT);
     const tool = findTool(tools, "agents_select");
 
-    // DispatchRequest.validate() (runtime.py, invoked via select_agents.py)
-    // rejects --base combined with --files; this exercises the CLI path's
-    // non-zero-exit error mapping end to end, and incidentally covers the
-    // --base flag, which no other test passes.
+    // select_agents.py's own argument validation rejects --base combined
+    // with --files; this exercises the CLI path's non-zero-exit error
+    // mapping end to end, and incidentally covers the --base flag, which
+    // no other test passes.
     const result = (await tool.execute(
       { task: "test", files: "README.md", base: "main" },
       {} as never,
