@@ -67,6 +67,69 @@ def _normalize_skill_name(match: re.Match) -> str:
     return "brief-pending-gates"
 
 
+# The duplicated skills also cite the forge-specific gate-tracking skill name
+# and its reason-code vocabulary as a generic, cross-forge example (e.g.
+# "translating the same reason-code vocabulary `gitlab-gate-tracking` uses
+# later"). The core copy happens to spell that example using GitLab's own
+# terms verbatim, so the gitlab copy needs no rewrite there, but the github
+# copy must translate each term to its own equivalent. This mapping is
+# intentionally one-directional and only ever applied for forge="github" --
+# it maps the github-side term back to the core/gitlab-side term so the
+# *translated* github copy compares equal to core.
+#
+# That equality check on its own is NOT sufficient to prove translation
+# happened: a github copy that left the raw GitLab-flavored tokens
+# untranslated would ALSO compare equal to core (core's text already
+# spells them that way), so drift would silently pass. GITLAB_LEAK_TERMS
+# below plus test_github_copies_translate_gate_tracking_terms is the
+# actual enforcement -- it asserts none of the raw GitLab-only tokens
+# appear literally in a github copy.
+GITHUB_TO_CORE_TERMS = {
+    "create-github-gate-issues": "gitlab-gate-tracking",
+    "no-github-binding": "no-gitlab-binding",
+    "github-user-unresolved": "gitlab-user-unresolved",
+    "GitLab equivalent": "GitHub equivalent",
+}
+GITHUB_TERM_PATTERN = re.compile("|".join(re.escape(k) for k in GITHUB_TO_CORE_TERMS))
+
+# core's "Known limitation" paragraph (GitLab-flavored) claims a
+# gitlab-user-ambiguous case exists; GitHub genuinely has no equivalent
+# (its login lookup is exact-match -- see create-github-gate-issues's own
+# Step 5), so the github copy legitimately drops that clause instead of
+# translating it term-for-term. Normalize the github copy's shorter clause
+# back to core's for comparison purposes; a gitlab copy is never subject to
+# this substitution, so it still must literally retain core's own clause.
+GITHUB_AMBIGUOUS_CLAUSE = (
+    "account) at that point even though this preflight looked fine — unlike\n"
+    "GitLab, GitHub's lookup is exact-match, so there is no separate\n"
+    "ambiguous-match case here. Tell the human this explicitly rather\n"
+    "than implying the binding has been fully verified."
+)
+CORE_AMBIGUOUS_CLAUSE = (
+    "account) or `gitlab-user-ambiguous` (more than one match) at that point even\n"
+    "though this preflight looked fine. Tell the human this explicitly rather\n"
+    "than implying the binding has been fully verified."
+)
+
+# The subset of GITHUB_TO_CORE_TERMS values that are genuinely GitLab-only
+# identifiers (skill name, reason codes) rather than reversed prose swaps
+# like "GitHub equivalent"/"GitLab equivalent" -- these must never appear
+# literally in a github copy.
+GITLAB_LEAK_TERMS = (
+    "gitlab-gate-tracking",
+    "no-gitlab-binding",
+    "gitlab-user-unresolved",
+    "gitlab-user-ambiguous",
+)
+
+
+def _normalize_forge_terms(forge: str, text: str) -> str:
+    if forge != "github":
+        return text
+    text = GITHUB_TERM_PATTERN.sub(lambda m: GITHUB_TO_CORE_TERMS[m.group(0)], text)
+    return text.replace(GITHUB_AMBIGUOUS_CLAUSE, CORE_AMBIGUOUS_CLAUSE)
+
+
 def _skill_body(path: Path) -> str:
     text = path.read_text(encoding="utf-8")
     if not text.startswith("---\n"):
@@ -182,12 +245,29 @@ class DuplicatedSkillBodyTests(unittest.TestCase):
             for forge in FORGES:
                 forge_body = _skill_body(self._forge_path(skill, forge))
                 normalized = _skill_name_pattern(forge).sub(_normalize_skill_name, forge_body)
+                normalized = _normalize_forge_terms(forge, normalized)
                 self.assertEqual(
                     core_body,
                     normalized,
                     f"{self._forge_path(skill, forge)} body has drifted from "
                     f"{self._core_path(skill)} beyond the expected cross-reference "
                     "renames",
+                )
+
+    def test_github_copies_translate_gate_tracking_terms(self) -> None:
+        # Regression guard: a github copy that left core's GitLab-flavored
+        # gate-tracking-skill/reason-code example untranslated would still
+        # pass test_bodies_match_after_normalizing_cross_reference_renames
+        # above, because the untranslated text is byte-identical to core's
+        # own text. This is the actual enforcement that translation happened.
+        for skill in self.SKILLS:
+            path = self._forge_path(skill, "github")
+            body = _skill_body(path)
+            for term in GITLAB_LEAK_TERMS:
+                self.assertNotIn(
+                    term,
+                    body,
+                    f"{path} still contains the untranslated GitLab-only term {term!r}",
                 )
 
     def test_frontmatter_name_matches_the_suffixed_skill_directory(self) -> None:

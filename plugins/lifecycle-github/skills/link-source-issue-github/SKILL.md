@@ -15,7 +15,7 @@ These commands fetch one real GitHub issue and record it as the recorded
 **This is not approval evidence.** Neither command ever touches
 `human_approvals` or a gate's `status` — recording a source issue link is a
 separate, lower-stakes action than deciding a gate. This mirrors the same
-disclaimer `gitlab-gate-tracking` carries for its own artifacts: closing or
+disclaimer `create-github-gate-issues` carries for its own artifacts: closing or
 commenting on an issue is never itself an approval, and neither is linking
 one as a source. For actually recording a gate decision, use
 `lifecycle-review-generic-github`/`lifecycle-review-github` instead.
@@ -66,7 +66,7 @@ guessing.
 
 This is a one-way, low-ceremony action — it fetches one issue and records
 one link, nothing more — so it does not need a dry-run/apply two-phase flow
-the way `gitlab-gate-tracking` does. But it is still an external-state read
+the way `create-github-gate-issues` does. But it is still an external-state read
 plus a repository-state write, so tell the human plainly, before running
 anything:
 

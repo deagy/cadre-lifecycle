@@ -21,7 +21,7 @@ remains exclusively `agentic-sdlc decide` / `approve-from-github-pr`, against
 an external approval record. Reinforce this yourself whenever you report the
 outcome to the human — never let them treat "I posted the gate-status
 comment" as if it were a review action. This is the same posture
-`gitlab-gate-tracking` takes toward the GitLab issues it creates.
+`create-github-gate-issues` takes toward the GitHub issues it creates.
 
 Content is deliberately minimal: the gate table, current phase, and a count
 of re-entries (never raw identity or rationale text). Do not promise the
@@ -65,7 +65,7 @@ It's a convenience, not a required step.
 
 ## Step 2 — Preview (optional, no ceremony)
 
-Unlike `gitlab-gate-tracking`, there's no plan-digest handshake here and
+Unlike `create-github-gate-issues`, there's no plan-digest handshake here and
 nothing gets assigned to anyone, so a dry-run isn't a mandatory gate — it's
 just useful to preview. `--dry-run` is also the command's default:
 

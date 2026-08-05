@@ -75,7 +75,7 @@ cline doctor fix
 Add this repository as a marketplace once (pin to a release tag), then install whichever plugins you want:
 
 ```text
-/plugin marketplace add deagy/cadre-lifecycle@v0.6.0
+/plugin marketplace add deagy/cadre-lifecycle@v0.7.0
 /plugin install cadre@cadre-lifecycle-team
 
 # Optional — only if you want forge-agnostic-only G1–G10 lifecycle governance:
@@ -94,7 +94,7 @@ Add this repository as a marketplace once (pin to a release tag), then install w
 Clone at the tag first, add the marketplace once, then install whichever plugins you want:
 
 ```sh
-git clone --branch v0.6.0 https://github.com/deagy/cadre-lifecycle.git
+git clone --branch v0.7.0 https://github.com/deagy/cadre-lifecycle.git
 codex plugin marketplace add /path/to/cadre-lifecycle
 codex plugin add cadre@cadre-lifecycle-team
 
@@ -231,6 +231,7 @@ Pushing that bump to `main` triggers [`.github/workflows/release.yml`](.github/w
 
 See [Releases](https://github.com/deagy/cadre-lifecycle/releases) for the full history, or jump to a specific version:
 
+- [v0.7.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.7.0) — Make `cadre-lifecycle-github`/`-gitlab` self-sufficient: each bundles its own onboarding/generic-review/pending-gates skills and kernel bootstrap script, no longer requiring `cadre-lifecycle-core`
 - [v0.6.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.6.0) — Add `brief-pending-gates` (local-only, forge-agnostic pending-gate briefing); tighten context-reuse wording across all 11 forge skills
 - [v0.5.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.5.0) — Add 3 skills: GitHub gate-issue tracking, an advisory (non-request) reviewer nudge, and read-only GitLab reviewer-candidate reporting
 - [v0.4.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.4.0) — Add 6 skills: source-issue linking, gate-status PR/MR comments (both forges), read-only reviewer-candidate reporting (GitHub); onboarding identity preflight

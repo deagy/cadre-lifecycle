@@ -122,7 +122,7 @@ same way the kernel itself resolves it (explicit field wins, then
 URI-form `assignee`, then unresolved) and tell the human plainly whether it
 looks like a usable forge binding *before* you write it to
 `authorities.json`, not after. Use plain language, translating the same
-reason-code vocabulary `gitlab-gate-tracking` uses later, so the human hears
+reason-code vocabulary `create-github-gate-issues` uses later, so the human hears
 about a problem now instead of mid-run:
 
 - Looks fine (an explicit `gitlab_username`/`github_login`, or an `assignee`
@@ -132,8 +132,8 @@ about a problem now instead of mid-run:
   don't need GitHub/GitLab-review-backed approvals) → that's fine as-is; no
   need to press further.
 - They *do* want GitHub/GitLab-review-backed approvals (per Step 6) but gave
-  a bare name or email with no forge form (this is `no-gitlab-binding`/the
-  GitHub equivalent) → ask them for the actual GitHub login or GitLab
+  a bare name or email with no forge form (this is `no-github-binding`/the
+  GitLab equivalent) → ask them for the actual GitHub login or GitLab
   username now, before writing the file, rather than leaving it to be
   discovered later.
 
@@ -142,10 +142,11 @@ checks that the identity is *shaped* like a usable binding (explicit field
 present, or a well-formed `gitlab.com/`/`github.com/` URI). There is no
 kernel command exposed today that verifies the account actually exists on
 GitHub/GitLab from here — that live check only happens the first time a
-forge-write skill (like `gitlab-gate-tracking`) actually runs and calls the
-forge API, and it can still come back `gitlab-user-unresolved` (no such
-account) or `gitlab-user-ambiguous` (more than one match) at that point even
-though this preflight looked fine. Tell the human this explicitly rather
+forge-write skill (like `create-github-gate-issues`) actually runs and calls the
+forge API, and it can still come back `github-user-unresolved` (no such
+account) at that point even though this preflight looked fine — unlike
+GitLab, GitHub's lookup is exact-match, so there is no separate
+ambiguous-match case here. Tell the human this explicitly rather
 than implying the binding has been fully verified.
 
 Then, for the 5 **conditional** roles, ask a gating yes/no question first
