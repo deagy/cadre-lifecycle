@@ -99,44 +99,13 @@ re-derived from `cline/index.ts`, which never sets a `providerId` at all
 (it only shells out to/invokes the Cadre CLI/bridge and never spawns a
 Cline session itself).
 
-## Hardening vs. the upstream template
+## Hardening vs. upstream template
 
-This port intentionally departs from `examples/plugins/agents-squad` in
-three ways:
+This port intentionally departs from `examples/plugins/agents-squad` in three ways (verified accurate as of this port; see `index.ts` for the implementation):
 
-1. **Real, not advisory, tool enforcement.** Each preset's source `tools:`
-   frontmatter (Claude Code tool names: `Read`, `Grep`, `Glob`, `Bash`,
-   `Edit`, `Write`) is translated at conversion time into an `allowedTools`
-   frontmatter field using Cline's own canonical builtin tool names
-   (`read_files`, `search_codebase`, `run_commands`, `editor`). At dispatch
-   time, `resolveToolPolicyConfig` (see `index.ts`) turns that into an
-   explicit deny-by-default `toolPolicies` map --
-   `{ "*": { enabled: false }, <tool>: { enabled: true }, ... }` -- mirroring
-   the exact `"*"`-wildcard-plus-per-tool-override semantics implemented by
-   `isToolEnabledByPolicies`/`filterToolsByPolicies` in
-   `packages/core/src/runtime/orchestration/runtime-builder.ts`. For every
-   role whose `allowedTools` contains none of `run_commands`/`editor`/
-   `apply_patch` (i.e. it is genuinely read-only -- 28 of the 71 roles),
-   `mode: "plan"` is also set as defense-in-depth: an additional hard
-   command guard beyond the tool policy alone (see
-   `packages/core/src/extensions/tools/presets.ts`'s `plan` preset and its
-   command-guard-extension hook).
-2. **Reserved bundled names.** The upstream template's discovery precedence
-   (project > global > bundled, matched by frontmatter `name:`, not
-   filename) lets a project-local `.cline/agents/<anything>.md` silently
-   override a bundled preset. This port reserves the 71 bundled role names:
-   a global- or project-tier file whose `name:` collides with one is
-   rejected outright (skipped, with a clear warning logged), never allowed
-   to override the bundled definition's system prompt or tool policy.
-3. **Preset-only dispatch, containment-checked `cwd`.** `start_subagent`
-   requires `preset` to name a known preset (bundled or an accepted
-   global/project override) -- a missing or unknown preset is rejected, not
-   defaulted. `instructions` remains available as *additional* text appended
-   after the preset's system prompt, but can never substitute for a missing
-   preset. Any caller-supplied `cwd`/`workingDirectory` must resolve to a
-   path within the workspace root (`ctx.workspaceInfo.rootPath`); a path
-   that would escape it (e.g. `../../etc`) is **rejected**, not silently
-   clamped.
+1. **Real, not advisory, tool enforcement.** Each preset's source `tools:` frontmatter is translated into Cline's canonical `allowedTools` names, then turned into an explicit deny-by-default `toolPolicies` map at dispatch time (`resolveToolPolicyConfig`). Genuinely read-only roles (28 of 71, no `run_commands`/`editor`/`apply_patch`) additionally get `mode: "plan"` as defense-in-depth.
+2. **Reserved bundled names.** Unlike the upstream template's project > global > bundled override precedence, this port rejects (not silently overrides) any global-/project-tier file whose `name:` collides with one of the 71 bundled role names.
+3. **Preset-only dispatch, containment-checked `cwd`.** `start_subagent` rejects a missing/unknown `preset` rather than defaulting to an unrestricted subagent. A caller-supplied `cwd`/`workingDirectory` that would escape the workspace root (e.g. `../../etc`) is rejected, not clamped.
 
 ## Custom agents and skills
 
@@ -164,43 +133,14 @@ minus the ability to shadow a reserved bundled agent name:
 
 ## Path-reference rewrites
 
-Every one of the 71 source role bodies ends with an identical ~550-line
-appended block (`# Shared policy: roster/shared/<file>` sections --
-operating-principles, team-profile, technology-standards, library-standards,
-knowledge-use-policy, agent-autonomy). That block, and several roles'
-`## Required checks` bullets, contain source-repo-relative path references
-(`` `../../shared/team-profile.yaml` ``, `` `../../review/halt-authority/AGENT.md` ``,
-`roster/shared/README.md`, `roster/knowledge-store/README.md`, etc.) that
-resolve inside the *source* Cadre register/catalog layout but would 404 in
-an arbitrary consumer project's working tree. Those were mechanically
-rewritten into abstract descriptions of the referenced artifact (e.g. "this
-project's technology-standards documentation", "the halt-authority role
-definition") across all 71 files.
+Each source role body ends with an identical appended shared-policy block containing source-repo-relative path references (e.g. `` `../../shared/team-profile.yaml` ``, `roster/shared/README.md`) that resolve inside the *source* Cadre register/catalog layout but would 404 in an arbitrary consumer project. These were mechanically rewritten into abstract descriptions of the referenced artifact across all 71 files.
 
-Two roles needed a closer look rather than a mechanical rewrite:
+Two roles needed a closer look rather than a mechanical rewrite -- re-check these if the corresponding source `agents/*.md` file changes:
 
-- **`application-engineer`** -- this role's entire purpose is maintaining
-  *this cadre-lifecycle source repository's own tooling*
-  (`roster/catalog.yaml`, `roster/orchestration/routing.yaml`,
-  `roster/RUNBOOK.md`, the `cadre generate-plugin`/
-  `cadre generate-role-metadata` regeneration flow, `deagy/cadre-lifecycle`).
-  Those references are the literal subject of the role, not incidental
-  cross-references, so they were left unrewritten and a port note was
-  appended to the preset body explaining that this preset is only
-  meaningful when dispatched against a checkout of the cadre-lifecycle/cadre
-  register repositories themselves -- not an arbitrary consumer project.
-- **`debugging-engineer`** -- one bullet ("When inspecting agents, verify
-  `` `AGENT.md` `` authority, catalog registration, ...") named a
-  cadre-suite-internal filename for an occasional meta-task within an
-  otherwise general-purpose debugging role. That one bullet was reworded to
-  describe "an agent definition's authority, catalog/registry registration,
-  ..." generically rather than naming the literal filename.
+- **`application-engineer`** -- this role's entire purpose is maintaining *this cadre-lifecycle source repository's own tooling* (`roster/catalog.yaml`, `roster/orchestration/routing.yaml`, the `cadre generate-plugin` regeneration flow). Those references are the literal subject of the role, so they were left unrewritten with an appended port note: this preset is only meaningful against a checkout of the cadre-lifecycle/cadre register repositories, not an arbitrary consumer project.
+- **`debugging-engineer`** -- one bullet named a cadre-suite-internal filename (`` `AGENT.md` ``) for an occasional meta-task within an otherwise general-purpose debugging role. That bullet was reworded to describe "an agent definition's authority, catalog/registry registration, ..." generically instead.
 
-No other source-repo-relative path leakage remains in any of the 71
-converted bodies (verified by grepping the output for `roster/`-prefixed
-paths, `../../`-relative paths, and bare `AGENTS.md`/`` `AGENT.md` ``
-references outside the `canonicalSource`/`convertedFrom` frontmatter and the
-two call-outs above).
+No other source-repo-relative path leakage remains in the 71 converted bodies (verified by grepping for `roster/`-prefixed and `../../`-relative paths, and bare `AGENTS.md`/`` `AGENT.md` `` references, outside frontmatter and the two call-outs above).
 
 ## Dependencies
 
