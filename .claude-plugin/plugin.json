@@ -9,6 +9,11 @@
   },
   "homepage": "https://github.com/deagy/cadre-lifecycle",
   "repository": "https://github.com/deagy/cadre-lifecycle",
-  "keywords": ["cadre", "orchestration", "system-wide", "knowledge-store"],
+  "keywords": [
+    "cadre",
+    "orchestration",
+    "system-wide",
+    "knowledge-store"
+  ],
   "skills": "./skills/"
 }
