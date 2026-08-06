@@ -17,6 +17,38 @@ below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/rel
 
 ## [Unreleased]
 
+### Removed
+
+- **`agents_select`'s native LangGraph bridge execution path, and the vendored
+  `agentic_sdlc_langgraph/` engine it depended on, have been removed.**
+  `cline/index.ts` now has a single execution path: it always shells out to
+  this repository's own `bin/cadre select` CLI, the same code path every
+  other consumer (Codex, `cline-agents/`, `bin/cadre` itself) already uses.
+  This drops `cline/index.ts` from 554 to 179 lines — the file-path
+  resolution, `child.stdin` handling, response-envelope translation,
+  validation-message reconciliation, and `SIGKILL` timer-escalation logic
+  that the native path required (see the [0.1.1] entry below for the bug
+  chain that path accumulated) are gone along with it, not carried forward.
+  `agentic_sdlc_langgraph/` (`bridge.py`, `runtime.py`, and their tests) is
+  deleted outright; the Agentic SDLC kernel remains available exclusively as
+  the external, separately-installed `agentic-sdlc` CLI dependency it always
+  was for every other consumer. `cline/index.test.mts` was rewritten to
+  match (10 tests, replacing the prior native-path-aware suite of 15), then
+  4 more were added on review to close coverage gaps: `requireSdlc`
+  forwarding to `--require-sdlc` (asserting the actual
+  hard-failure-vs-standalone-degrade behavioral difference, not just flag
+  presence, across two tests), `base` used alone without `files` (the
+  `<base>...HEAD` git-diff discovery path), and a routed task rejecting an
+  out-of-taxonomy `classification` value — 14 tests in total.
+- Corrected two remaining "merged Cadre + Agentic SDLC + Cline + LangGraph"
+  repository-identity references (`README.md`'s and `cadre-ref.txt`'s
+  "Regenerating Assets" prose) left stale by the above — this repository's
+  own composition is now Cadre + Agentic SDLC + Cline identity; LangGraph is
+  only ever present as the external Agentic SDLC kernel's own internal
+  engine, correctly described elsewhere (README.md's architecture section,
+  `suite/roster/RUNBOOK.md`, `skills/run-agent-orchestration/SKILL.md`) and
+  left untouched.
+
 ### Fixed
 
 - **`cline-agents/` was undiscoverable from this repository's own top-level docs.** It ships a full Cline plugin (own `package.json`, `npm test`/`npm run typecheck`, 71 dispatchable Cadre role presets) but was mentioned nowhere in README.md's Repository Layout tree or "Running Tests" list, nor in AGENTS.md's component description or command list. Added a `cline-agents/` row to README's layout tree and test commands, and an equivalent component description and test commands to AGENTS.md (the file CLAUDE.md points to as authoritative for commands, so not duplicated there).

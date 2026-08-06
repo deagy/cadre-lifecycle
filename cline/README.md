@@ -41,8 +41,8 @@ The role catalog is bundled with this plugin itself, not read from the target
 workspace, so `root` may be any project — it does not need to be a checkout of
 `deagy/cadre` or contain its own `catalog.yaml`.
 
-When the Agentic SDLC LangGraph engine (`../agentic_sdlc_langgraph/`) is available,
-`agents_select` invokes it natively; otherwise it falls back to `bin/cadre select`.
+`agents_select` has a single execution path: it shells out to `bin/cadre select`
+(this repository's `cadre` CLI), the sole authoritative dispatch implementation.
 
 ### Example
 
