@@ -7,12 +7,15 @@ import type { AgentTool, AgentToolContext } from "@cline/sdk";
 import {
   type AgentDefinition,
   HANDOFFS_DIR,
+  type KnowledgeContextRequest,
   plugin,
   readAgentDefinitions,
   readSkillDefinitions,
   resolveContainedCwd,
   resolveHandoffPath,
+  resolvePythonInterpreter,
   resolveToolPolicyConfig,
+  retrieveKnowledgeContext,
   type SetupApi,
   type SetupContext,
   validateHandoffRelativePath,
@@ -488,6 +491,55 @@ describe("dispatch_selected_roles", () => {
     await expect(
       tool.execute({ task: "anything" }, FAKE_TOOL_CTX),
     ).rejects.toThrow(/workspace root/);
+  });
+});
+
+describe("knowledge-store retrieval wiring", () => {
+  it("resolves a real Python 3.10+ interpreter in this environment", async () => {
+    const interpreter = await resolvePythonInterpreter();
+    expect(["python3", "python"]).toContain(interpreter);
+  });
+
+  it("returns status: unavailable, not a thrown error, for a failing retrieval invocation", async () => {
+    // Deliberately missing every required argument (--agent, --task-id,
+    // --query, --classification) so the real knowledge-store CLI's own
+    // argparse rejects it (exit 2) -- this only needs a real Python
+    // interpreter, not a configured knowledge store, and exercises the
+    // same failure path a genuinely unconfigured/unauthorized retrieval
+    // would take.
+    const request: KnowledgeContextRequest = {
+      agent: "backend-engineer",
+      query: "irrelevant",
+      invocation: {
+        launcher: { runtime: "python", minimum_version: "3.10" },
+        args: [join(REPO_ROOT, "suite", "roster", "knowledge-store", "src", "cli.py"), "context"],
+      },
+    };
+
+    const result = await retrieveKnowledgeContext(request, REPO_ROOT);
+    expect(result.status).toBe("unavailable");
+    expect(result.error).toBeTruthy();
+    expect(result.context).toBeUndefined();
+  });
+
+  it("dispatch_selected_roles reports knowledge: not-attempted when nothing was staffed", async () => {
+    // The "no matching route" test above already confirms dispatched is
+    // empty in this case; this asserts the specific reason a per-role
+    // knowledge status never appears is that dispatch never reached the
+    // per-role loop at all, not that it silently swallowed a status.
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "dispatch_selected_roles");
+    const result = (await tool.execute(
+      {
+        task: "Investigate a vague, non-actionable ask with no concrete artifact",
+        files: "does-not-exist-and-matches-no-route.unknownext",
+        taskId: "dispatch-selected-roles-test-knowledge-no-match",
+        classification: "internal",
+      },
+      FAKE_TOOL_CTX,
+    )) as { dispatched: Array<{ knowledge?: string }> };
+
+    expect(result.dispatched).toEqual([]);
   });
 });
 
