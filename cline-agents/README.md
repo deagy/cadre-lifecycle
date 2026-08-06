@@ -77,6 +77,7 @@ and discovers the entry point from the `cline.plugins` field.
 | `list_agent_presets` | List the 71 bundled Cadre role presets plus any accepted global/project overrides. |
 | `list_skills` / `get_skill` | Discover and load skill instructions: this repository's own 7 bundled skills (a static port of `skills/*/SKILL.md`, with any `references/*.md` inlined -- see `skills/*.md` in this plugin), plus any accepted global/project overlays. Like agent presets, a bundled skill name cannot be silently shadowed by a same-named global/project skill. |
 | `save_handoff` / `read_handoff` | Share text between subagents in the same conversation. |
+| `create_review_subtask` / `write_wiki_page` / `write_evidence_comment` | GitLab evidence tools, reached via `cadre gitlab-evidence` (this plugin has no MCP client, so it cannot attach `suite/roster/orchestration/mcp/gitlab_server.py` directly -- see `suite/roster/orchestration/mcp/GITLAB-EVIDENCE.md`). All three require `GITLAB_SVC_TOKEN`/`GITLAB_BASE_URL`/`GITLAB_DOCS_PROJECT_ID` in this process's environment and return `status="unavailable"` if unset. `create_review_subtask`/`write_evidence_comment` are create-only, single-call. `write_wiki_page` is the `human_approval`-tier tool: its first call never writes -- it returns `status="confirmation_required"` plus a token that must be shown to a human and replayed unchanged on a second call before anything is written. |
 
 Unlike the upstream `agents-squad` template, `start_subagent` has **no
 default preset**. Every call must name a known preset; there is no

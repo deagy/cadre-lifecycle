@@ -79,6 +79,7 @@ describe("cline-agents plugin manifest", () => {
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
       [
+        "create_review_subtask",
         "dispatch_selected_roles",
         "get_skill",
         "get_subagent",
@@ -88,6 +89,8 @@ describe("cline-agents plugin manifest", () => {
         "read_handoff",
         "save_handoff",
         "start_subagent",
+        "write_evidence_comment",
+        "write_wiki_page",
       ].sort(),
     );
   });
@@ -682,5 +685,96 @@ describe("handoff-store path-traversal guard", () => {
 
     const resolved = resolveHandoffPath(HANDOFF_CTX, relativePath);
     expect(resolved).toBe(join(HANDOFFS_DIR, conversationId, relativePath));
+  });
+});
+
+describe("GitLab evidence tools (create_review_subtask/write_wiki_page/write_evidence_comment)", () => {
+  // None of these tests set GITLAB_SVC_TOKEN, so every call below reaches
+  // gitlab_core.resolve_token()'s fail-closed path and returns
+  // status="unavailable" without ever attempting a real GitLab call --
+  // matching this file's existing "dispatch_selected_roles"/knowledge-store
+  // convention of exercising the real subprocess rather than mocking it.
+
+  it("create_review_subtask forwards every field to `cadre gitlab-evidence create-review-subtask`", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "create_review_subtask");
+    const result = (await tool.execute(
+      {
+        parentIssueIid: 5,
+        title: "Review needed",
+        description: "Some evidence body",
+        gateId: "G5",
+        taskId: "TASK-1",
+      },
+      FAKE_TOOL_CTX,
+    )) as { status?: string; reason?: string };
+
+    expect(result.status).toBe("unavailable");
+    expect(result.reason).toMatch(/GITLAB_SVC_TOKEN/);
+  });
+
+  it("write_wiki_page's first call never writes and only ever reflects gitlab_core's own status", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "write_wiki_page");
+    const result = (await tool.execute(
+      { slug: "evidence/task-1", title: "Evidence", content: "body text" },
+      FAKE_TOOL_CTX,
+    )) as { status?: string; reason?: string };
+
+    // Config resolution happens before the confirmation gate in
+    // gitlab_core.write_wiki_page, so an unconfigured environment still
+    // reports "unavailable", not "confirmation_required" -- this tool
+    // never fabricates a different status than what gitlab_core returned.
+    expect(result.status).toBe("unavailable");
+    expect(result.reason).toMatch(/GITLAB_SVC_TOKEN/);
+  });
+
+  it("write_wiki_page omits --format/--confirmation-token from argv when not provided", async () => {
+    // Regression guard for the optional-flag assembly in index.ts: passing
+    // an empty confirmationToken/format must not forward "--format ''" or
+    // "--confirmation-token ''" to the CLI, which would fail closed with an
+    // argparse error instead of reaching gitlab_core at all.
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "write_wiki_page");
+    const result = (await tool.execute(
+      { slug: "s", title: "t", content: "c" },
+      FAKE_TOOL_CTX,
+    )) as { status?: string };
+    expect(result.status).toBe("unavailable");
+  });
+
+  it("write_evidence_comment forwards every field to `cadre gitlab-evidence write-evidence-comment`", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "write_evidence_comment");
+    const result = (await tool.execute(
+      { issueIid: 7, content: "evidence text", taskId: "TASK-1" },
+      FAKE_TOOL_CTX,
+    )) as { status?: string; reason?: string };
+
+    expect(result.status).toBe("unavailable");
+    expect(result.reason).toMatch(/GITLAB_SVC_TOKEN/);
+  });
+
+  it("rejects a non-positive issueIid before ever shelling out", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "write_evidence_comment");
+    await expect(
+      tool.execute({ issueIid: 0, content: "x", taskId: "TASK-1" }, FAKE_TOOL_CTX),
+    ).rejects.toThrow();
+  });
+
+  it("rejects an unknown wiki format before ever shelling out", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "write_wiki_page");
+    await expect(
+      tool.execute({ slug: "s", title: "t", content: "c", format: "html" }, FAKE_TOOL_CTX),
+    ).rejects.toThrow();
+  });
+
+  it("write_wiki_page's description tells the caller never to fabricate a confirmation token", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "write_wiki_page");
+    expect(tool.description).toMatch(/confirmation_required/);
+    expect(tool.description).toMatch(/never fabricate/);
   });
 });
