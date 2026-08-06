@@ -137,11 +137,11 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
       execute: async (rawInput: unknown): Promise<Record<string, unknown> | AgentsSelectError> => {
         const input = AgentsSelectInputSchema.parse(rawInput);
         if (!rootPath) {
-          return {
+          return sanitizeToolResult({
             error:
               "Could not resolve the workspace root from the host session; agents_select requires a known " +
               "workspace root and will not fall back to the process's current directory.",
-          };
+          }) as AgentsSelectError;
         }
 
         try {

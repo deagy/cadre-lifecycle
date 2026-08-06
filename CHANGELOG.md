@@ -15,6 +15,12 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.9.7](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.7) - 2026-08-06
+
+### Fixed
+
+- **`list_agent_presets` and `list_skills` (`cline-agents`) threw `Error: JSON.stringify cannot serialize cyclic structures`**, the same error class 0.9.6 fixed for `dispatch_selected_roles` — that fix only wrapped the one tool that happened to surface the bug first, not every tool whose return value flows through the same Cline SDK serialization path where a cyclic reference can be injected regardless of what the tool itself computed. Audited every `execute()` in `cline-agents/index.ts` and `cline/index.ts` and applied the existing `sanitizeToolResult()` helper consistently to every tool return path that lacked it (`start_subagent`, `list_agent_presets`, `message_subagent`, `get_subagent`, `save_handoff`, `read_handoff`, `list_skills`, `get_skill`, `create_review_subtask`, `write_wiki_page`, `write_evidence_comment` in `cline-agents`, plus one previously-unwrapped early-return path in `cline`'s `agents_select`) — no tool's behavior, error semantics, or return shape changed beyond sanitization. Added regression tests for `list_agent_presets`/`list_skills` following the same genuine-self-referential-object-plus-control-assertion pattern as 0.9.6's `dispatch_selected_roles` test.
+
 ## [0.9.6](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.6) - 2026-08-06
 
 ### Fixed
