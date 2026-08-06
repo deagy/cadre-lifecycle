@@ -15,6 +15,16 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.9.5](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.5) - 2026-08-06
+
+### Added
+
+- **`cline-agents` gains three GitLab evidence tools: `create_review_subtask`, `write_wiki_page`, `write_evidence_comment`** (#29). `cline-agents` has no MCP client and could not attach `suite/roster/orchestration/mcp/gitlab_server.py` (a stdio MCP server) directly, so these were previously unreachable from a Cline session. Rather than reimplementing GitLab HTTP/validation/audit logic in TypeScript, all three tools shell out to `cadre gitlab-evidence <op>` ([deagy/cadre#103](https://github.com/deagy/cadre/pull/103)'s new non-MCP CLI adapter), reaching the exact same safety-audited `gitlab_core.py` core Claude Code/Codex use via MCP. Every tool requires `GITLAB_SVC_TOKEN`/`GITLAB_BASE_URL`/`GITLAB_DOCS_PROJECT_ID` and returns `status="unavailable"` if unset. `write_wiki_page` is the `human_approval`-tier tool: its first call never writes, only returns a confirmation token a human must approve before a second, identical call actually writes.
+
+### Fixed
+
+- **`suite/roster/orchestration/mcp/` was missing `gitlab_core.py`/`gitlab_server.py`/`GITLAB-EVIDENCE.md` entirely**, despite `cadre-ref.txt` claiming sync with a `deagy/cadre` revision that already had them — a pre-existing regeneration-drift gap, found and fixed while adding the tools above. Regenerated `suite/` from `deagy/cadre@589e7d8`.
+
 ## [0.9.4](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.4) - 2026-08-06
 
 ### Fixed
