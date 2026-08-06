@@ -15,6 +15,12 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.9.4](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.4) - 2026-08-06
+
+### Fixed
+
+- **`cline plugin install https://github.com/deagy/cadre-lifecycle --force` still failed with `Cannot find module 'vitest'` after v0.9.3** (#27). v0.9.3's fix was based on the wrong theory (that Cline reads a package's `tsconfig.json` `include` set to decide which files to load). Verified empirically instead, using fast local-path installs: Cline's installer actually recursively `require()`s every `.ts` file anywhere under each workspace directory, ignoring `tsconfig.json`, `cline.plugins[].paths`, and node_modules entirely — but it only matches `.ts`, not `.mts`. Renamed `cline-agents/test/presets.test.ts` to `presets.test.mts`, matching the convention `cline/` and `cline-lifecycle/`'s test files already use (which is why they were never affected). A real `cline plugin install --force` against the fix now completes with no sync warnings at all.
+
 ## [0.9.3](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.3) - 2026-08-06
 
 ### Fixed
