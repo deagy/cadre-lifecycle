@@ -41,13 +41,20 @@ function findTool(tools: AgentTool[], name: string): AgentTool {
   return tool;
 }
 
+const GITLAB_TOOL_NAMES = [
+  "sdlc_approve_from_gitlab",
+  "sdlc_approve_from_gitlab_mr",
+  "sdlc_link_intent_from_gitlab_issue",
+  "sdlc_link_requirements_from_gitlab_issue",
+];
+
 describe("cadre-lifecycle plugin", () => {
-  it("declares the tools capability and registers exactly the 4 sdlc tools", async () => {
+  it("declares the tools capability and registers exactly the 4 forge-agnostic sdlc tools plus the 4 GitLab-specific ones", async () => {
     expect(plugin.manifest.capabilities).toEqual(["tools"]);
 
     const tools = await registerTools(REPO_ROOT);
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ["sdlc_init", "sdlc_validate", "sdlc_status", "sdlc_decide"].sort(),
+      ["sdlc_init", "sdlc_validate", "sdlc_status", "sdlc_decide", ...GITLAB_TOOL_NAMES].sort(),
     );
   });
 
@@ -57,6 +64,27 @@ describe("cadre-lifecycle plugin", () => {
     expect(findTool(tools, "sdlc_validate").description).toMatch(/bin\/cadre sdlc validate/);
     expect(findTool(tools, "sdlc_status").description).toMatch(/bin\/cadre sdlc status/);
     expect(findTool(tools, "sdlc_decide").description).toMatch(/bin\/cadre sdlc decide/);
+    expect(findTool(tools, "sdlc_approve_from_gitlab").description).toMatch(
+      /bin\/cadre sdlc approve-from-gitlab`/,
+    );
+    expect(findTool(tools, "sdlc_approve_from_gitlab_mr").description).toMatch(
+      /bin\/cadre sdlc approve-from-gitlab-mr/,
+    );
+    expect(findTool(tools, "sdlc_link_intent_from_gitlab_issue").description).toMatch(
+      /bin\/cadre sdlc link-intent-from-gitlab-issue/,
+    );
+    expect(findTool(tools, "sdlc_link_requirements_from_gitlab_issue").description).toMatch(
+      /bin\/cadre sdlc link-requirements-from-gitlab-issue/,
+    );
+  });
+
+  it("the two approve-from-gitlab tools add no approval logic of their own", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    for (const name of ["sdlc_approve_from_gitlab", "sdlc_approve_from_gitlab_mr"]) {
+      const description = findTool(tools, name).description ?? "";
+      expect(description).toMatch(/preparer\/verifier/);
+      expect(description).toMatch(/no approval logic of its own/);
+    }
   });
 
   it("sdlc_decide's description states it adds no approval logic of its own", async () => {
@@ -90,6 +118,39 @@ describe("cadre-lifecycle plugin", () => {
           actorId: "tester",
           evidenceUri: "doc:test",
         },
+        {} as never,
+      ),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_approve_from_gitlab").execute(
+        {
+          taskId: "x",
+          gate: "G1",
+          role: "test",
+          projectPath: "group/project",
+          mrIid: 1,
+          approvalId: "1",
+          approverUsername: "tester",
+          commitSha: "deadbeef",
+        },
+        {} as never,
+      ),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_approve_from_gitlab_mr").execute(
+        { taskId: "x", gate: "G1", role: "test", projectPath: "group/project", mrIid: 1 },
+        {} as never,
+      ),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_link_intent_from_gitlab_issue").execute(
+        { taskId: "x", role: "test", projectPath: "group/project", issueIid: 1 },
+        {} as never,
+      ),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_link_requirements_from_gitlab_issue").execute(
+        { taskId: "x", role: "test", projectPath: "group/project", issueIid: 1 },
         {} as never,
       ),
     ).rejects.toThrow(/root/i);
@@ -147,6 +208,69 @@ describe("cadre-lifecycle plugin", () => {
       )) as Record<string, unknown>;
       expect(typeof result.error).toBe("string");
       expect(result.status).not.toBe("approved");
+    });
+
+    it("sdlc_approve_from_gitlab returns a structured error (never a false success) for a nonexistent task/gate", async () => {
+      const tools = await registerTools(REPO_ROOT);
+      const result = (await findTool(tools, "sdlc_approve_from_gitlab").execute(
+        {
+          taskId: "cline-lifecycle-test-nonexistent-task",
+          gate: "G1",
+          role: "cline-lifecycle-test-role",
+          projectPath: "cline-lifecycle-test/project",
+          mrIid: 1,
+          approvalId: "1",
+          approverUsername: "cline-lifecycle-test-approver",
+          commitSha: "0000000000000000000000000000000000000000",
+        },
+        {} as never,
+      )) as Record<string, unknown>;
+      expect(typeof result.error).toBe("string");
+      expect(result.status).not.toBe("approved");
+    });
+
+    it("sdlc_approve_from_gitlab_mr returns a structured error (never a false success) for a nonexistent task/gate", async () => {
+      const tools = await registerTools(REPO_ROOT);
+      const result = (await findTool(tools, "sdlc_approve_from_gitlab_mr").execute(
+        {
+          taskId: "cline-lifecycle-test-nonexistent-task",
+          gate: "G1",
+          role: "cline-lifecycle-test-role",
+          projectPath: "cline-lifecycle-test/project",
+          mrIid: 1,
+        },
+        {} as never,
+      )) as Record<string, unknown>;
+      expect(typeof result.error).toBe("string");
+      expect(result.status).not.toBe("approved");
+    });
+
+    it("sdlc_link_intent_from_gitlab_issue returns a structured error for a nonexistent task", async () => {
+      const tools = await registerTools(REPO_ROOT);
+      const result = (await findTool(tools, "sdlc_link_intent_from_gitlab_issue").execute(
+        {
+          taskId: "cline-lifecycle-test-nonexistent-task",
+          role: "cline-lifecycle-test-role",
+          projectPath: "cline-lifecycle-test/project",
+          issueIid: 1,
+        },
+        {} as never,
+      )) as Record<string, unknown>;
+      expect(typeof result.error).toBe("string");
+    });
+
+    it("sdlc_link_requirements_from_gitlab_issue returns a structured error for a nonexistent task", async () => {
+      const tools = await registerTools(REPO_ROOT);
+      const result = (await findTool(tools, "sdlc_link_requirements_from_gitlab_issue").execute(
+        {
+          taskId: "cline-lifecycle-test-nonexistent-task",
+          role: "cline-lifecycle-test-role",
+          projectPath: "cline-lifecycle-test/project",
+          issueIid: 1,
+        },
+        {} as never,
+      )) as Record<string, unknown>;
+      expect(typeof result.error).toBe("string");
     });
 
     describe("sdlc_init dry-run against a scratch project", () => {

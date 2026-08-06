@@ -42,6 +42,23 @@ const CADRE_BIN = path.resolve(PLUGIN_DIR, "..", "bin", "cadre");
 // decision from the same identity as the gate's preparer/verifier
 // structurally (see CLAUDE.md's "Human approval invariant"); this tool only
 // relays whatever the kernel decides, success or refusal.
+//
+// The 4 tools above are forge-agnostic. `cadre-lifecycle-gitlab` additionally
+// bundles 8 GitLab-specific skills (lifecycle-review-gitlab,
+// link-source-issue-gitlab, etc. -- see plugins/lifecycle-gitlab/skills/) for
+// Claude Code / Codex, driving GitLab-specific kernel subcommands the 4 tools
+// above have no access to. This plugin closes that same gap for the 4
+// subcommands that actually touch GitLab (`approve-from-gitlab`,
+// `approve-from-gitlab-mr`, `link-intent-from-gitlab-issue`,
+// `link-requirements-from-gitlab-issue`) with 4 more tool calls below,
+// following the exact same convention: deterministic argument-building and
+// JSON pass-through, no approval or linking logic of this plugin's own. The
+// remaining GitLab-lifecycle skills (gitlab-gate-tracking,
+// publish-gate-status-gitlab, report-gate-reviewers-gitlab,
+// brief-pending-gates-gitlab) are read-only/advisory or issue-publishing
+// conveniences layered on top of gate state this plugin's existing
+// sdlc_status already exposes, not additional kernel subcommands -- they are
+// not mirrored here.
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -95,10 +112,59 @@ const SdlcDecideInput = z
   })
   .strict();
 
+const SdlcApproveFromGitlabInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID the approval applies to (required)."),
+    gate: z.string().min(1).describe("Gate ID, e.g. G1 (required)."),
+    role: z.string().min(1).describe("Authority role recording the approval (required)."),
+    projectPath: z.string().min(1).describe("GitLab project path, namespace/project (required)."),
+    mrIid: z.number().int().positive().describe("Merge request internal ID, iid (required)."),
+    approvalId: z.string().min(1).describe("GitLab approval identifier (required)."),
+    approverUsername: z.string().min(1).describe("GitLab username that authored the approval (required)."),
+    commitSha: z.string().min(1).describe("Commit SHA reviewed by the GitLab approval (required)."),
+    decidedAt: z.string().min(1).optional().describe("Optional RFC3339 approval time; defaults to now."),
+  })
+  .strict();
+
+const SdlcApproveFromGitlabMrInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID the approval applies to (required)."),
+    gate: z.string().min(1).describe("Gate ID, e.g. G1 (required)."),
+    role: z.string().min(1).describe("Authority role recording the approval (required)."),
+    projectPath: z.string().min(1).describe("GitLab project path, namespace/project (required)."),
+    mrIid: z.number().int().positive().describe("Merge request internal ID, iid (required)."),
+    approverUsername: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("GitLab username to match; defaults to the authority's GitLab binding."),
+    commitSha: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Optional commit SHA to require when selecting an approved approval."),
+  })
+  .strict();
+
+const GitlabIssueLinkInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID the link applies to (required)."),
+    role: z.string().min(1).describe("Authority role recording the link (required)."),
+    projectPath: z.string().min(1).describe("GitLab project path, namespace/project (required)."),
+    issueIid: z.number().int().positive().describe("Issue internal ID, iid (required)."),
+  })
+  .strict();
+
 type SdlcInitInputShape = z.infer<typeof SdlcInitInput>;
 type SdlcValidateInputShape = z.infer<typeof SdlcValidateInput>;
 type SdlcStatusInputShape = z.infer<typeof SdlcStatusInput>;
 type SdlcDecideInputShape = z.infer<typeof SdlcDecideInput>;
+type SdlcApproveFromGitlabInputShape = z.infer<typeof SdlcApproveFromGitlabInput>;
+type SdlcApproveFromGitlabMrInputShape = z.infer<typeof SdlcApproveFromGitlabMrInput>;
+type GitlabIssueLinkInputShape = z.infer<typeof GitlabIssueLinkInput>;
 
 interface SdlcToolError {
   error: string;
@@ -159,6 +225,89 @@ function buildDecideArgs(input: SdlcDecideInputShape, rootPath: string): string[
   return args;
 }
 
+function buildApproveFromGitlabArgs(input: SdlcApproveFromGitlabInputShape, rootPath: string): string[] {
+  const args = [
+    "sdlc",
+    "approve-from-gitlab",
+    "--root",
+    input.root ?? rootPath,
+    "--task-id",
+    input.taskId,
+    "--gate",
+    input.gate,
+    "--role",
+    input.role,
+    "--project-path",
+    input.projectPath,
+    "--mr-iid",
+    String(input.mrIid),
+    "--approval-id",
+    input.approvalId,
+    "--approver-username",
+    input.approverUsername,
+    "--commit-sha",
+    input.commitSha,
+  ];
+  if (input.decidedAt) args.push("--decided-at", input.decidedAt);
+  return args;
+}
+
+function buildApproveFromGitlabMrArgs(input: SdlcApproveFromGitlabMrInputShape, rootPath: string): string[] {
+  const args = [
+    "sdlc",
+    "approve-from-gitlab-mr",
+    "--root",
+    input.root ?? rootPath,
+    "--task-id",
+    input.taskId,
+    "--gate",
+    input.gate,
+    "--role",
+    input.role,
+    "--project-path",
+    input.projectPath,
+    "--mr-iid",
+    String(input.mrIid),
+  ];
+  if (input.approverUsername) args.push("--approver-username", input.approverUsername);
+  if (input.commitSha) args.push("--commit-sha", input.commitSha);
+  return args;
+}
+
+function buildLinkIntentFromGitlabIssueArgs(input: GitlabIssueLinkInputShape, rootPath: string): string[] {
+  return [
+    "sdlc",
+    "link-intent-from-gitlab-issue",
+    "--root",
+    input.root ?? rootPath,
+    "--task-id",
+    input.taskId,
+    "--role",
+    input.role,
+    "--project-path",
+    input.projectPath,
+    "--issue-iid",
+    String(input.issueIid),
+  ];
+}
+
+function buildLinkRequirementsFromGitlabIssueArgs(input: GitlabIssueLinkInputShape, rootPath: string): string[] {
+  return [
+    "sdlc",
+    "link-requirements-from-gitlab-issue",
+    "--root",
+    input.root ?? rootPath,
+    "--task-id",
+    input.taskId,
+    "--role",
+    input.role,
+    "--project-path",
+    input.projectPath,
+    "--issue-iid",
+    String(input.issueIid),
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // Sanitization (same convention as cline/index.ts's sanitizeToolResult)
 // ---------------------------------------------------------------------------
@@ -191,7 +340,16 @@ async function runCadreSdlc(args: string[], rootPath: string): Promise<Record<st
 type SetupFn = NonNullable<AgentPlugin["setup"]>;
 export type SetupApi = Parameters<SetupFn>[0];
 export type SetupContext = Parameters<SetupFn>[1];
-export type { SdlcInitInputShape, SdlcValidateInputShape, SdlcStatusInputShape, SdlcDecideInputShape, SdlcToolError };
+export type {
+  SdlcInitInputShape,
+  SdlcValidateInputShape,
+  SdlcStatusInputShape,
+  SdlcDecideInputShape,
+  SdlcApproveFromGitlabInputShape,
+  SdlcApproveFromGitlabMrInputShape,
+  GitlabIssueLinkInputShape,
+  SdlcToolError,
+};
 
 const setup = (api: SetupApi, ctx: SetupContext) => {
   const rootPath = ctx.workspaceInfo?.rootPath;
@@ -272,6 +430,79 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
         const input = SdlcDecideInput.parse(rawInput);
         const root = requireRootPath(input.root);
         return runCadreSdlc(buildDecideArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_approve_from_gitlab",
+      description:
+        "Record a human gate approval from prepared GitLab MR-approval evidence, via `bin/cadre sdlc " +
+        "approve-from-gitlab` -- the same command lifecycle-review-gitlab's Step 4a documents for " +
+        "Claude Code / Codex, for when the human already reported the approval details rather than " +
+        "having this tool fetch them live from the MR (use sdlc_approve_from_gitlab_mr for that). This " +
+        "tool adds no approval logic of its own: the kernel structurally refuses a decision from the " +
+        "same identity as the gate's preparer/verifier. Never call this on behalf of a human who has " +
+        "not actually recorded the GitLab approval being cited.",
+      inputSchema: z.toJSONSchema(SdlcApproveFromGitlabInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = SdlcApproveFromGitlabInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildApproveFromGitlabArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_approve_from_gitlab_mr",
+      description:
+        "Record a human gate approval by fetching and verifying an actual approved GitLab MR approval " +
+        "live, via `bin/cadre sdlc approve-from-gitlab-mr` -- the same command lifecycle-review-gitlab's " +
+        "Step 4b documents for Claude Code / Codex. Fails closed if no matching approved approval is " +
+        "found on the merge request. This tool adds no approval logic of its own: the kernel " +
+        "structurally refuses a decision from the same identity as the gate's preparer/verifier.",
+      inputSchema: z.toJSONSchema(SdlcApproveFromGitlabMrInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = SdlcApproveFromGitlabMrInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildApproveFromGitlabMrArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_link_intent_from_gitlab_issue",
+      description:
+        "Record a real GitLab issue as the recorded source for a task's G1 (Intent) gate, via " +
+        "`bin/cadre sdlc link-intent-from-gitlab-issue` -- the same command link-source-issue-gitlab's " +
+        "Step 4 documents for Claude Code / Codex. Only ever applies to G1: records a source, not an " +
+        "approval -- for a GitLab MR approval use sdlc_approve_from_gitlab/sdlc_approve_from_gitlab_mr.",
+      inputSchema: z.toJSONSchema(GitlabIssueLinkInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = GitlabIssueLinkInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildLinkIntentFromGitlabIssueArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_link_requirements_from_gitlab_issue",
+      description:
+        "Record a real GitLab issue as the recorded source for a task's G2 (Requirements Baseline) " +
+        "gate, via `bin/cadre sdlc link-requirements-from-gitlab-issue` -- the same command " +
+        "link-source-issue-gitlab's Step 4 documents for Claude Code / Codex. Only ever applies to G2: " +
+        "records a source, not an approval -- for a GitLab MR approval use " +
+        "sdlc_approve_from_gitlab/sdlc_approve_from_gitlab_mr.",
+      inputSchema: z.toJSONSchema(GitlabIssueLinkInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = GitlabIssueLinkInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildLinkRequirementsFromGitlabIssueArgs(input, root), root);
       },
     }),
   );
