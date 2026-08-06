@@ -29,6 +29,12 @@ under `cline-agents/agents/` will silently go stale until someone re-runs the
 (currently unautomated) conversion by hand. Treat this directory as a
 point-in-time snapshot, not a live view of the Cadre catalog.
 
+The same is true of `cline-agents/skills/` (a similarly static, hand-authored
+port of this repository's root [`skills/`](../skills) directory, one file per
+skill with any `references/*.md` content inlined) -- it goes stale the same
+way, for the same reason, and needs the same kind of manual re-port when the
+source skill changes.
+
 ## Quick start
 
 ```ts
@@ -61,7 +67,7 @@ and discovers the entry point from the `cline.plugins` field.
 | `message_subagent` | Send a follow-up message to a running subagent. |
 | `get_subagent` | Poll status, output, or error for a subagent session. |
 | `list_agent_presets` | List the 71 bundled Cadre role presets plus any accepted global/project overrides. |
-| `list_skills` / `get_skill` | Discover and load loadable skill instructions (global/project only -- this plugin ships no bundled skills of its own). |
+| `list_skills` / `get_skill` | Discover and load skill instructions: this repository's own 7 bundled skills (a static port of `skills/*/SKILL.md`, with any `references/*.md` inlined -- see `skills/*.md` in this plugin), plus any accepted global/project overlays. Like agent presets, a bundled skill name cannot be silently shadowed by a same-named global/project skill. |
 | `save_handoff` / `read_handoff` | Share text between subagents in the same conversation. |
 
 Unlike the upstream `agents-squad` template, `start_subagent` has **no
