@@ -62,9 +62,14 @@ import { safeJsonStringify } from "@cline/shared";
 // symbols, undefined). Uses the SDK's safeJsonStringify which detects and
 // replaces cycles with "[Circular]" rather than throwing. Mirrors the
 // identical function in cline/index.ts -- the `agents_select` tool there
-// uses it, and `dispatch_selected_roles` here needs the same protection
-// because its return value also flows through the same Cline SDK serialization
-// path that can encounter injected cyclic references.
+// uses it. Every `execute()` return value in this file goes through this
+// helper: the doc comment above explains that the Cline SDK (or downstream
+// hooks) can inject cyclic references into whatever object a tool returns,
+// at the SDK serialization layer, regardless of what the tool itself
+// computed -- so this isn't limited to the one tool (`dispatch_selected_roles`)
+// that happened to surface the failure first (see cline-agents#... /
+// deagy/cadre-lifecycle CHANGELOG for the `list_agent_presets`/`list_skills`
+// follow-up).
 
 /**
  * Sanitize a tool result to ensure it is fully JSON-serializable without
@@ -76,7 +81,7 @@ function sanitizeToolResult(input: unknown): Record<string, unknown> {
   try {
     return JSON.parse(safeJsonStringify(input)) as Record<string, unknown>;
   } catch {
-    return { error: "dispatch_selected_roles failed: result could not be serialized" };
+    return { error: "tool result could not be serialized" };
   }
 }
 
@@ -1147,7 +1152,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
       retryable: false,
       execute: async (rawInput: unknown, toolCtx: AgentToolContext) => {
         const input = StartSubagentInput.parse(rawInput);
-        return startPresetSubagent(input, toolCtx);
+        return sanitizeToolResult(await startPresetSubagent(input, toolCtx));
       },
     }) as AgentTool<unknown, unknown>,
   );
@@ -1272,7 +1277,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
           source: a.source,
           allowedTools: a.allowedTools,
         }));
-        return {
+        return sanitizeToolResult({
           agents,
           text: agents.length
             ? agents
@@ -1282,7 +1287,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
                 )
                 .join("\n")
             : "No agent definitions found.",
-        };
+        });
       },
     }) as AgentTool<unknown, unknown>,
   );
@@ -1323,12 +1328,12 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
           label: subagent.name,
         });
         void runSubagentTurn(subagent, input.prompt, input.notifyParent !== false);
-        return {
+        return sanitizeToolResult({
           status: "started",
           sessionId: subagent.sessionId,
           label: subagent.name,
           task: subagent.task,
-        };
+        });
       },
     }) as AgentTool<unknown, unknown>,
   );
@@ -1343,13 +1348,13 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
         const input = GetSubagentInput.parse(rawInput);
         const subagent = subagents.get(input.sessionId);
         if (!subagent) {
-          return {
+          return sanitizeToolResult({
             status: "unknown",
             sessionId: input.sessionId,
             text: `No tracked session: ${input.sessionId}`,
-          };
+          });
         }
-        return {
+        return sanitizeToolResult({
           status: subagent.status,
           sessionId: subagent.sessionId,
           label: subagent.name,
@@ -1357,7 +1362,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
           finishReason: subagent.finishReason,
           error: subagent.error,
           text: subagent.resultText ?? (subagent.status === "running" ? "Still running." : ""),
-        };
+        });
       },
     }) as AgentTool<unknown, unknown>,
   );
@@ -1374,7 +1379,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
         const filePath = resolveHandoffPath(toolCtx, input.path);
         mkdirSync(dirname(filePath), { recursive: true });
         writeFileSync(filePath, input.content, "utf8");
-        return { path: filePath, handoffPath: input.path };
+        return sanitizeToolResult({ path: filePath, handoffPath: input.path });
       },
     }) as AgentTool<unknown, unknown>,
   );
@@ -1391,7 +1396,11 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
         if (!existsSync(filePath)) {
           throw new Error(`Handoff not found: ${input.path}`);
         }
-        return { path: filePath, handoffPath: input.path, content: readFileSync(filePath, "utf8") };
+        return sanitizeToolResult({
+          path: filePath,
+          handoffPath: input.path,
+          content: readFileSync(filePath, "utf8"),
+        });
       },
     }) as AgentTool<unknown, unknown>,
   );
@@ -1408,12 +1417,12 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
       execute: async (_input: unknown, _toolCtx: AgentToolContext) => {
         const baseCwd = requireWorkspaceRoot();
         const skills = readSkillDefinitions(baseCwd);
-        return {
+        return sanitizeToolResult({
           skills: skills.map((s) => ({ name: s.name, description: s.description, source: s.source })),
           text: skills.length
             ? skills.map((s) => `- ${s.name} [${s.source}]${s.description ? `: ${s.description}` : ""}`).join("\n")
             : "No skill definitions found.",
-        };
+        });
       },
     }) as AgentTool<unknown, unknown>,
   );
@@ -1433,7 +1442,12 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
           const available = skills.map((s) => s.name).join(", ");
           throw new Error(`Unknown skill: "${input.name}". Available: ${available || "none"}`);
         }
-        return { name: skill.name, description: skill.description, source: skill.source, instructions: skill.content };
+        return sanitizeToolResult({
+          name: skill.name,
+          description: skill.description,
+          source: skill.source,
+          instructions: skill.content,
+        });
       },
     }) as AgentTool<unknown, unknown>,
   );
@@ -1456,19 +1470,21 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
       retryable: false,
       execute: async (rawInput: unknown, _toolCtx: AgentToolContext) => {
         const input = CreateReviewSubtaskInput.parse(rawInput);
-        return runGitlabEvidenceCli([
-          "create-review-subtask",
-          "--parent-issue-iid",
-          String(input.parentIssueIid),
-          "--title",
-          input.title,
-          "--description",
-          input.description,
-          "--gate-id",
-          input.gateId,
-          "--task-id",
-          input.taskId,
-        ]);
+        return sanitizeToolResult(
+          await runGitlabEvidenceCli([
+            "create-review-subtask",
+            "--parent-issue-iid",
+            String(input.parentIssueIid),
+            "--title",
+            input.title,
+            "--description",
+            input.description,
+            "--gate-id",
+            input.gateId,
+            "--task-id",
+            input.taskId,
+          ]),
+        );
       },
     }) as AgentTool<unknown, unknown>,
   );
@@ -1492,7 +1508,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
         const args = ["write-wiki-page", "--slug", input.slug, "--title", input.title, "--content", input.content];
         if (input.format) args.push("--format", input.format);
         if (input.confirmationToken) args.push("--confirmation-token", input.confirmationToken);
-        return runGitlabEvidenceCli(args);
+        return sanitizeToolResult(await runGitlabEvidenceCli(args));
       },
     }) as AgentTool<unknown, unknown>,
   );
@@ -1510,15 +1526,17 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
       retryable: false,
       execute: async (rawInput: unknown, _toolCtx: AgentToolContext) => {
         const input = WriteEvidenceCommentInput.parse(rawInput);
-        return runGitlabEvidenceCli([
-          "write-evidence-comment",
-          "--issue-iid",
-          String(input.issueIid),
-          "--content",
-          input.content,
-          "--task-id",
-          input.taskId,
-        ]);
+        return sanitizeToolResult(
+          await runGitlabEvidenceCli([
+            "write-evidence-comment",
+            "--issue-iid",
+            String(input.issueIid),
+            "--content",
+            input.content,
+            "--task-id",
+            input.taskId,
+          ]),
+        );
       },
     }) as AgentTool<unknown, unknown>,
   );

@@ -2,7 +2,8 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { ClineCore } from "@cline/sdk";
 import type { AgentTool, AgentToolContext } from "@cline/sdk";
 import {
   type AgentDefinition,
@@ -464,6 +465,174 @@ describe("settled decision #4: preset-only dispatch and cwd containment", () => 
   });
 });
 
+describe("get_subagent (untracked session, no mocking required)", () => {
+  it("returns status: unknown for a session id that was never started or messaged", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "get_subagent");
+    const result = (await tool.execute(
+      { sessionId: "session-that-was-never-started" },
+      FAKE_TOOL_CTX,
+    )) as { status: string; sessionId: string; text: string };
+
+    expect(result.status).toBe("unknown");
+    expect(result.sessionId).toBe("session-that-was-never-started");
+    expect(result.text).toMatch(/No tracked session/);
+  });
+});
+
+describe("save_handoff / read_handoff execute() round-trip", () => {
+  const conversationId = "handoff-execute-roundtrip-conv";
+  const HANDOFF_CTX = { conversationId } as AgentToolContext;
+
+  afterEach(() => {
+    rmSync(join(HANDOFFS_DIR, conversationId), { recursive: true, force: true });
+  });
+
+  it("writes then reads back a handoff, round-tripping the path/handoffPath/content shapes", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const saveTool = findTool(tools, "save_handoff");
+    const readTool = findTool(tools, "read_handoff");
+
+    const saveResult = (await saveTool.execute(
+      { path: "research/notes.md", content: "hello from a round-trip test" },
+      HANDOFF_CTX,
+    )) as { path: string; handoffPath: string };
+
+    expect(saveResult.handoffPath).toBe("research/notes.md");
+    expect(saveResult.path).toBe(join(HANDOFFS_DIR, conversationId, "research/notes.md"));
+
+    const readResult = (await readTool.execute(
+      { path: "research/notes.md" },
+      HANDOFF_CTX,
+    )) as { path: string; handoffPath: string; content: string };
+
+    expect(readResult.path).toBe(saveResult.path);
+    expect(readResult.handoffPath).toBe("research/notes.md");
+    expect(readResult.content).toBe("hello from a round-trip test");
+  });
+
+  it("read_handoff throws for a path that was never saved in this conversation", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const readTool = findTool(tools, "read_handoff");
+    await expect(
+      readTool.execute({ path: "never/saved.md" }, HANDOFF_CTX),
+    ).rejects.toThrow(/Handoff not found/);
+  });
+});
+
+describe("start_subagent / message_subagent / get_subagent against a mocked ClineCore session", () => {
+  // getSessionManager() (index.ts) lazily creates a single ClineCore
+  // instance and caches the promise at module scope for the rest of this
+  // process's lifetime -- it is not exported, and there is no way to reset
+  // it from a test file. No test earlier in this file ever reaches a
+  // *successful* getSessionManager() call: every start_subagent case above
+  // either fails schema/preset/cwd validation before startPresetSubagent is
+  // reached at all. That makes this describe block's first test the first
+  // real call in the whole suite, so spying on the static ClineCore.create
+  // factory here reliably seeds that cache with a fake in-memory session for
+  // every test below (and, because the cache is never cleared, for any test
+  // later in this file too -- none of them exercise a real subagent turn,
+  // so that is harmless). This mirrors the level of mocking already used
+  // for `bin/cadre select`-backed tools elsewhere in this file (exercising
+  // the real interface with controlled inputs) as closely as is possible
+  // here, given that a real ClineCore session requires a live, model-backed
+  // provider this suite must not depend on.
+  let startedSessionIds: string[];
+  let createSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeAll(() => {
+    startedSessionIds = [];
+    let counter = 0;
+    const fakeCore = {
+      start: vi.fn().mockImplementation(async () => {
+        counter += 1;
+        const sessionId = `fake-session-${counter}`;
+        startedSessionIds.push(sessionId);
+        return { sessionId };
+      }),
+      get: vi.fn().mockImplementation(async (sessionId: string) =>
+        startedSessionIds.includes(sessionId) || sessionId === "externally-known-session"
+          ? { sessionId }
+          : undefined,
+      ),
+      // Deliberately never resolves: runSubagentTurn (index.ts) awaits
+      // mgr.send(...) before flipping status away from "running" -- an
+      // intentionally-pending send lets the get_subagent test below
+      // deterministically observe "running" without racing a real async
+      // completion or needing a fake clock.
+      send: vi.fn().mockImplementation(() => new Promise(() => {})),
+      readMessages: vi.fn().mockResolvedValue([]),
+    };
+    createSpy = vi.spyOn(ClineCore, "create").mockResolvedValue(fakeCore as unknown as ClineCore);
+  });
+
+  afterAll(() => {
+    createSpy.mockRestore();
+  });
+
+  it("start_subagent's success path returns {status, sessionId, label, preset, task} through sanitizeToolResult", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "start_subagent");
+    const result = (await tool.execute(
+      { label: "test run", task: "do the thing", preset: "security-reviewer" },
+      FAKE_TOOL_CTX,
+    )) as { status: string; sessionId: string; label: string; preset: string; task: string };
+
+    expect(result.status).toBe("started");
+    expect(result.sessionId).toMatch(/^fake-session-/);
+    expect(result.label).toBe("test run");
+    expect(result.preset).toBe("security-reviewer");
+    expect(result.task).toBe("do the thing");
+  });
+
+  it("get_subagent returns the tracked shape (status: running) for a session start_subagent just started", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const startTool = findTool(tools, "start_subagent");
+    const getTool = findTool(tools, "get_subagent");
+
+    const started = (await startTool.execute(
+      { label: "poll me", task: "long running task", preset: "security-reviewer" },
+      FAKE_TOOL_CTX,
+    )) as { sessionId: string };
+
+    const result = (await getTool.execute({ sessionId: started.sessionId }, FAKE_TOOL_CTX)) as {
+      status: string;
+      sessionId: string;
+      label: string;
+      task: string;
+      text: string;
+    };
+
+    expect(result.status).toBe("running");
+    expect(result.sessionId).toBe(started.sessionId);
+    expect(result.label).toBe("poll me");
+    expect(result.task).toBe("long running task");
+    expect(result.text).toBe("Still running.");
+  });
+
+  it("message_subagent returns {status: started, sessionId, label, task} immediately, without awaiting the async turn", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "message_subagent");
+    const result = (await tool.execute(
+      { sessionId: "externally-known-session", prompt: "please continue" },
+      FAKE_TOOL_CTX,
+    )) as { status: string; sessionId: string; label: string; task: string };
+
+    expect(result.status).toBe("started");
+    expect(result.sessionId).toBe("externally-known-session");
+    expect(result.label).toBe("externally-known-session");
+    expect(result.task).toBe("please continue");
+  });
+
+  it("message_subagent throws for a session unknown to the session manager", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "message_subagent");
+    await expect(
+      tool.execute({ sessionId: "truly-unknown-session", prompt: "hello" }, FAKE_TOOL_CTX),
+    ).rejects.toThrow(/Unknown session/);
+  });
+});
+
 describe("dispatch_selected_roles", () => {
   it("is registered alongside start_subagent, distinct from the plan-only cadre plugin's agents_select", async () => {
     const tools = await registerTools(REPO_ROOT);
@@ -713,6 +882,101 @@ describe("dispatch_selected_roles serialization safety", () => {
     // And the round-trip must preserve the data.
     const reparsed = JSON.parse(JSON.stringify(result));
     expect(reparsed).toEqual(result);
+  });
+});
+
+describe("list_agent_presets / list_skills serialization safety", () => {
+  // Regression coverage for the bug this fix addresses: list_agent_presets
+  // and list_skills previously returned their result object directly from
+  // execute(), with no sanitizeToolResult() wrapping -- unlike
+  // dispatch_selected_roles, which got that protection in the prior fix.
+  // Per this file's own "Serialization safety" comment, the Cline SDK (or a
+  // downstream hook) can inject cyclic references into whatever object a
+  // tool returns, at the SDK serialization layer, regardless of what the
+  // tool itself computed -- readAgentDefinitions/readSkillDefinitions only
+  // ever produce plain string/array fields, so this is not reproducible by
+  // feeding cyclic data through the real discovery path. Instead, this
+  // directly exercises sanitizeToolResult against the exact shape these two
+  // tools return (an `agents`/`skills` array), with a genuine
+  // self-referential entry and a control assertion that plain
+  // JSON.stringify throws on that same shape first -- proving this guard
+  // would have failed before sanitizeToolResult existed, matching the
+  // pattern of the "sanitizeToolResult" describe block above.
+  //
+  // Residual gap, confirmed rather than assumed: a test that would fail if
+  // someone stripped the `sanitizeToolResult(...)` call specifically out of
+  // list_agent_presets'/list_skills' own execute() bodies is not achievable
+  // from this file without changing index.ts. readAgentDefinitions,
+  // readSkillDefinitions, and sanitizeToolResult are all exported (see
+  // index.ts's "Exported for tests" block) and importable here, so
+  // `vi.spyOn(idx, "readAgentDefinitions")` / `vi.spyOn(idx,
+  // "sanitizeToolResult")` do install successfully -- but list_agent_presets
+  // and list_skills call those functions directly by their local names
+  // inside the same module, not through the exported namespace object, so
+  // ESM live-binding semantics mean the spies are never invoked (verified
+  // empirically: spying either function and calling the real
+  // list_agent_presets tool.execute() through registerTools/findTool still
+  // returns the true 71-role result and records zero spy calls). vi.mock()
+  // on "../index.ts" itself was also considered and rejected: it would
+  // replace the very module under test, so it cannot verify anything about
+  // the real execute() body. Short of restructuring index.ts to route these
+  // calls through an injectable seam (out of scope for this pass), the pair
+  // of tests immediately below -- proving the exact shape these two tools
+  // return survives a self-referential entry through sanitizeToolResult
+  // directly, plus the existing "real, non-cyclic result round-trips"
+  // tests further down exercising the actual tool.execute() path -- is the
+  // best achievable proxy: it would catch sanitizeToolResult itself
+  // regressing, and it would catch the two tools' output shape changing,
+  // but it would NOT catch someone specifically deleting the
+  // `sanitizeToolResult(...)` wrapper from just these two execute() bodies
+  // while leaving sanitizeToolResult itself intact.
+
+  it("list_agent_presets's returned shape survives a self-referential agent entry", () => {
+    const agent: { name: string; selfRef?: unknown } = { name: "cyclic-agent" };
+    agent.selfRef = agent;
+    const shape = { agents: [agent], text: "- cyclic-agent" };
+
+    expect(() => JSON.stringify(shape)).toThrow(/circular/i);
+
+    let sanitized: Record<string, unknown> | undefined;
+    expect(() => {
+      sanitized = sanitizeToolResult(shape);
+    }).not.toThrow();
+    expect(() => JSON.stringify(sanitized)).not.toThrow();
+    expect((sanitized?.agents as Array<{ name: string }>)?.[0]?.name).toBe("cyclic-agent");
+  });
+
+  it("list_skills's returned shape survives a self-referential skill entry", () => {
+    const skill: { name: string; selfRef?: unknown } = { name: "cyclic-skill" };
+    skill.selfRef = skill;
+    const shape = { skills: [skill], text: "- cyclic-skill" };
+
+    expect(() => JSON.stringify(shape)).toThrow(/circular/i);
+
+    let sanitized: Record<string, unknown> | undefined;
+    expect(() => {
+      sanitized = sanitizeToolResult(shape);
+    }).not.toThrow();
+    expect(() => JSON.stringify(sanitized)).not.toThrow();
+    expect((sanitized?.skills as Array<{ name: string }>)?.[0]?.name).toBe("cyclic-skill");
+  });
+
+  it("list_agent_presets's real, non-cyclic result round-trips through JSON unchanged", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "list_agent_presets");
+    const result = await tool.execute({}, FAKE_TOOL_CTX);
+
+    expect(() => JSON.stringify(result)).not.toThrow();
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+  });
+
+  it("list_skills's real, non-cyclic result round-trips through JSON unchanged", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "list_skills");
+    const result = await tool.execute({}, FAKE_TOOL_CTX);
+
+    expect(() => JSON.stringify(result)).not.toThrow();
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
   });
 });
 
