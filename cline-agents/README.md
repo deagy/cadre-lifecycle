@@ -75,6 +75,26 @@ Unlike the upstream `agents-squad` template, `start_subagent` has **no
 default preset**. Every call must name a known preset; there is no
 fallback to a full-tool, unrestricted subagent.
 
+### Knowledge retrieval is an accepted, documented deviation from default-on
+
+`suite/roster/shared/knowledge-use-policy.md`/`team-profile.yaml` describe
+pre-dispatch retrieval as happening by default "when an authorized store is
+available." `dispatch_selected_roles` deliberately does not do that here:
+`classification` is a caller/model-asserted field, not an authenticated one
+(the knowledge store's own classification filtering is exact-match, not a
+permission check -- see `suite/roster/knowledge-store/SECURITY.md`), so this
+plugin cannot tell "authorized" apart from "asserted." Retrieval is opt-in
+(`retrieveKnowledge: true`) rather than defaulting on.
+
+This mitigates the retrieval-tool's own behavior, not the underlying data
+access: `dispatch_selected_roles` always returns the full plan, including
+`knowledge_context.requests[].invocation.args` -- the knowledge-store CLI's
+path plus the same `--classification`/`--source` flags retrieval would have
+used. A host session with `run_commands` could execute that argv itself
+regardless of `retrieveKnowledge`. This is the same plan contract `cline/`'s
+`agents_select` already exposes, not something this tool introduces; treat
+it as a property of the plan format, not a bypass of this opt-in gate.
+
 ## Model-tier mapping
 
 | Source `model:` tier | `modelId` | `providerId` |

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentTool, AgentToolContext } from "@cline/sdk";
 import {
   type AgentDefinition,
+  countFlaggedPassages,
   formatKnowledgeInstructions,
   HANDOFFS_DIR,
   type KnowledgeContextRequest,
@@ -18,6 +19,7 @@ import {
   resolvePythonInterpreter,
   resolveToolPolicyConfig,
   retrieveKnowledgeContext,
+  shouldRetrieveKnowledge,
   type SetupApi,
   type SetupContext,
   validateHandoffRelativePath,
@@ -558,22 +560,77 @@ describe("knowledge-store retrieval wiring", () => {
 
     it("surfaces a CAUTION line naming the flagged-passage count", () => {
       const formatted = formatKnowledgeInstructions({ ...baseResult, flaggedPassageCount: 2 });
-      expect(formatted).toMatch(/CAUTION: 2 of the passages below/);
+      // "above", not "below" -- the CAUTION line is emitted after the END
+      // marker (see the ordering test above), so it must refer back to
+      // content that already passed, not content still to come.
+      expect(formatted).toMatch(/CAUTION: 2 of the passages above/);
       expect(formatted).toMatch(/untrusted_instruction_risk/);
     });
   });
 
-  describe("dispatch_selected_roles retrieval opt-in", () => {
+  describe("shouldRetrieveKnowledge (the entire opt-in gate)", () => {
+    // Direct unit tests over the extracted predicate, not just an
+    // integration test through a plan that never reaches it -- a prior
+    // review round confirmed by mutation testing that reverting this gate
+    // to `!== false` (opt-out) left every other test in this file green,
+    // because no existing test forced a "planned" + dispatched scenario.
+    // These tests fail immediately if that regression is reintroduced.
+    it("is false when retrieveKnowledge is omitted, even with a planned classification", () => {
+      expect(shouldRetrieveKnowledge({}, { knowledge_context: { status: "planned" } })).toBe(false);
+    });
+
+    it("is false when retrieveKnowledge is explicitly false", () => {
+      expect(
+        shouldRetrieveKnowledge({ retrieveKnowledge: false }, { knowledge_context: { status: "planned" } }),
+      ).toBe(false);
+    });
+
+    it("is false when retrieveKnowledge is true but the plan never planned retrieval", () => {
+      expect(
+        shouldRetrieveKnowledge({ retrieveKnowledge: true }, { knowledge_context: { status: "authorization-required" } }),
+      ).toBe(false);
+      expect(shouldRetrieveKnowledge({ retrieveKnowledge: true }, {})).toBe(false);
+    });
+
+    it("is true only when both retrieveKnowledge is explicitly true AND the plan planned retrieval", () => {
+      expect(
+        shouldRetrieveKnowledge({ retrieveKnowledge: true }, { knowledge_context: { status: "planned" } }),
+      ).toBe(true);
+    });
+  });
+
+  describe("countFlaggedPassages (the cross-language untrusted_instruction_risk contract)", () => {
+    // Direct unit test over the extracted counter -- a prior review round
+    // confirmed by mutation testing that hardcoding this to 0 left every
+    // other test in this file green, since the 3 formatter tests above
+    // only ever pass flaggedPassageCount in directly rather than deriving
+    // it from a context object the way retrieveKnowledgeContext does.
+    it("counts only results flagged untrusted_instruction_risk: true", () => {
+      expect(
+        countFlaggedPassages({
+          results: [
+            { untrusted_instruction_risk: true },
+            { untrusted_instruction_risk: false },
+            { untrusted_instruction_risk: true },
+            {},
+          ],
+        }),
+      ).toBe(2);
+    });
+
+    it("is 0 for an empty or missing results array", () => {
+      expect(countFlaggedPassages({ results: [] })).toBe(0);
+      expect(countFlaggedPassages({})).toBe(0);
+    });
+  });
+
+  describe("dispatch_selected_roles retrieval opt-in (integration)", () => {
     it("does not attempt retrieval when retrieveKnowledge is omitted, even with a classification", async () => {
-      // Retrieval must be opt-in (must be explicitly true), not
-      // opt-out -- classification is caller-asserted, not authenticated
-      // (see suite/roster/knowledge-store/SECURITY.md). This never
-      // reaches a matching route, so dispatched is empty regardless;
-      // what this test actually pins down is that omitting
-      // retrieveKnowledge behaves identically to passing false, not
-      // identically to passing true, by checking retrievalRequested's
-      // effect is inert for an already-empty dispatch (a change to the
-      // opt-in default is exactly the kind of regression this guards).
+      // This never reaches a matching route, so dispatched is empty
+      // regardless of the retrieval gate -- the shouldRetrieveKnowledge
+      // describe block above is what actually proves the opt-in default;
+      // this only confirms the tool-level plumbing still returns a note
+      // explaining why nothing was dispatched.
       const tools = await registerTools(REPO_ROOT);
       const tool = findTool(tools, "dispatch_selected_roles");
       const result = (await tool.execute(
