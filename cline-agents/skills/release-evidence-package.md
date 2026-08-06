@@ -2,7 +2,6 @@
 name: release-evidence-package
 description: Assemble auditable release or demo-package evidence for this repository. Use when collecting source revisions, test results, scans, SBOMs, checksums, rendered manifests, OpenTofu validation, reviews, approvals, exceptions, and unavailable-tool reports.
 canonicalSource: skills/release-evidence-package/SKILL.md
-convertedFrom: cline-agents/skills/release-evidence-package.md
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.

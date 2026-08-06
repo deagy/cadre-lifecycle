@@ -2,7 +2,6 @@
 name: gitlab-pipeline-review
 description: Review GitLab CI/CD changes for secure pipeline design, runner trust, artifact integrity, SBOM/provenance, secrets exposure, and no-deploy guardrails. Use for .gitlab-ci.yml, CI templates, runner configuration, package-only pipelines, or promotion/release evidence checks.
 canonicalSource: skills/gitlab-pipeline-review/SKILL.md
-convertedFrom: cline-agents/skills/gitlab-pipeline-review.md
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.

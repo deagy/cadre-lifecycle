@@ -2,7 +2,6 @@
 name: agent-authoring
 description: Create or update this repository's agent definitions, catalog entries, routing rules, knowledge focus, workflows, runbook examples, and selector tests. Use when adding a specialist agent, changing agent authority, or keeping orchestration dispatch behavior consistent.
 canonicalSource: skills/agent-authoring/SKILL.md
-convertedFrom: cline-agents/skills/agent-authoring.md
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.

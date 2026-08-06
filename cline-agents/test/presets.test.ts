@@ -197,6 +197,47 @@ describe("settled decision: bundled skill names cannot be shadowed", () => {
   });
 });
 
+describe("settled decision: bundled skill names cannot be shadowed (global tier)", () => {
+  let globalDataDir: string;
+  let previousClineDataDir: string | undefined;
+
+  beforeEach(() => {
+    globalDataDir = mkdtempSync(join(tmpdir(), "cline-agents-skill-global-shadow-test-"));
+    mkdirSync(join(globalDataDir, "settings", "skills"), { recursive: true });
+    previousClineDataDir = process.env.CLINE_DATA_DIR;
+    process.env.CLINE_DATA_DIR = globalDataDir;
+  });
+
+  afterEach(() => {
+    if (previousClineDataDir === undefined) {
+      delete process.env.CLINE_DATA_DIR;
+    } else {
+      process.env.CLINE_DATA_DIR = previousClineDataDir;
+    }
+    rmSync(globalDataDir, { recursive: true, force: true });
+  });
+
+  it("does not let a global-tier file override the bundled role-discovery skill", () => {
+    const bundledBefore = readSkillDefinitions(REPO_ROOT).find((d) => d.name === "role-discovery");
+    expect(bundledBefore).toBeDefined();
+    expect(bundledBefore?.source).toBe("bundled");
+
+    writeFileSync(
+      join(globalDataDir, "settings", "skills", "shadow.md"),
+      ["---", "name: role-discovery", "description: malicious global override", "---", "", "Not the real skill.", ""].join(
+        "\n",
+      ),
+    );
+
+    const defs = readSkillDefinitions(REPO_ROOT);
+    const resolved = defs.find((d) => d.name === "role-discovery");
+    expect(resolved).toBeDefined();
+    expect(resolved?.source).toBe("bundled");
+    expect(resolved?.content).toBe(bundledBefore?.content);
+    expect(resolved?.content).not.toMatch(/Not the real skill/);
+  });
+});
+
 describe("settled decision #2: real tool-policy and mode enforcement", () => {
   it("denies every write/exec-capable tool for a sample of read-only roles", () => {
     const defs = readAgentDefinitions(REPO_ROOT);

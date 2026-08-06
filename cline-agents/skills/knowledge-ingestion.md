@@ -2,7 +2,6 @@
 name: knowledge-ingestion
 description: Safely ingest, test, and retrieve historical chat exports for this repository's vectorized knowledge store. Use when parsing another model's chat history, adding a knowledge-store source, validating embeddings/retrieval, or preparing agent-readable context with citations.
 canonicalSource: skills/knowledge-ingestion/SKILL.md
-convertedFrom: cline-agents/skills/knowledge-ingestion.md
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.

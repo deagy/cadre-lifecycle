@@ -2,7 +2,6 @@
 name: role-discovery
 description: Conversationally help a new or occasional user figure out which of this repository's 71 specialist roles fit their task, and how to phrase a real `cadre select` call. Use when a user asks "which agent should I use," "who does X kind of work," "what role fits this task," or seems unsure how the role catalog or routing works.
 canonicalSource: skills/role-discovery/SKILL.md
-convertedFrom: cline-agents/skills/role-discovery.md
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.

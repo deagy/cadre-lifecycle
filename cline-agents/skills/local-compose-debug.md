@@ -2,7 +2,6 @@
 name: local-compose-debug
 description: Diagnose and fix local Docker Compose or Podman Compose failures for repository demo stacks. Use for compose network label conflicts, PostgreSQL 18 volume layout errors, rootless volume permissions, frontend cache/node_modules mount problems, and local-only container startup issues.
 canonicalSource: skills/local-compose-debug/SKILL.md
-convertedFrom: cline-agents/skills/local-compose-debug.md
 ---
 
 > Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.
