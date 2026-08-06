@@ -109,6 +109,25 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      # cline-lifecycle/index.test.mts's "real bin/cadre sdlc subprocess
+      # calls" tests exercise the actual agentic-sdlc kernel binary, not a
+      # mock -- without it installed here, every one of those tests only
+      # ever exercises bin/cadre sdlc's own "kernel not found" fail-closed
+      # path, silently passing regardless of whether the tool-argument
+      # wiring is actually correct against a real kernel (found in review of
+      # PR #34). Install the exact version this repo's own provider.json
+      # declares as kernel_compatibility.minimum, the same one
+      # plugins/lifecycle/tools/bootstrap_sdlc.py installs for a human
+      # operator, read dynamically so this step can't itself drift stale.
+      - name: Install the pinned Agentic SDLC kernel
+        run: |
+          set -eu
+          minimum=$(python3 -c "import json; print(json.load(open('provider.json'))['kernel_compatibility']['minimum'])")
+          pip install --user "git+https://github.com/deagy/agentic-sdlc.git@v${minimum}#subdirectory=plugins/agentic-sdlc"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       # package.json declares npm workspaces (cline, cline-agents,
       # cline-lifecycle) backed by a single root package-lock.json, so
       # `npm ci` must run from the repo root -- a per-directory lockfile no

@@ -756,12 +756,21 @@ async function runCadreSdlc(args: string[], rootPath: string): Promise<Record<st
   }
 }
 
-// `request-gate-reviewers-gitlab`/`request-gate-reviewers` (per their own
-// SKILL.md docs) exit 0 for "report completed, no refusals", exit 2 for
-// "report completed, contains refusals/withheld-conflict entries -- still
-// valid JSON, not a failure", and exit 1 only for a genuine structural
-// failure (MR/PR not found, identity mismatch). Plain `runCadreSdlc` would
-// discard a real exit-2 report's stdout and misreport it as an opaque
+// Four kernel commands share the same non-zero-exit-can-still-be-a-valid-JSON-
+// report shape: `request-gate-reviewers-gitlab`/`request-gate-reviewers` exit
+// 2 for "report completed, contains refusals/withheld-conflict entries --
+// still valid JSON, not a failure" (per their own SKILL.md docs), and
+// `create-gate-issues`/`create-github-gate-issues` exit 2 whenever their own
+// result has non-empty `refusals` or `drift_detected` -- including during an
+// ordinary dry-run preview, and, in `--apply` mode, *after* issues have
+// already been created/assigned on the real forge (confirmed against
+// `cmd_create_gate_issues`/`cmd_create_github_gate_issues` in the kernel
+// source: both print the full JSON result to stdout, then `return 2`). Exit 1
+// is reserved for a genuine structural failure in all four (MR/PR not found,
+// identity mismatch, malformed request). Plain `runCadreSdlc` would discard a
+// real exit-2 report's stdout -- including, for the two create-issues
+// commands, the `plan_digest` a subsequent `apply: true` call needs, and any
+// confirmation that a write already happened -- and misreport it as an opaque
 // error; this variant parses `err.stdout` as JSON first and only falls back
 // to the generic error shape if that fails (the exit-1 case).
 async function runCadreSdlcAllowingReportExitCodes(
@@ -815,6 +824,15 @@ export type {
   SdlcPublishReviewerNudgeInputShape,
   SdlcToolError,
 };
+
+// Exported for direct, kernel-free unit testing of argument construction --
+// in particular the sdlc_publish_gate_status discriminated union's two
+// branches and the `gates` array -> CSV join shared by several builders,
+// neither of which a real-subprocess test can distinguish from a wrong
+// implementation when no kernel is installed to reject a malformed
+// invocation (see index.test.mts's "argument construction (kernel-free)"
+// tests).
+export { buildPublishGateStatusArgs, buildCreateGateIssuesGitlabArgs, buildRequestGateReviewersGitlabArgs };
 
 const setup = (api: SetupApi, ctx: SetupContext) => {
   const rootPath = ctx.workspaceInfo?.rootPath;
@@ -1041,7 +1059,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
       execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
         const input = SdlcCreateGateIssuesGitlabInput.parse(rawInput);
         const root = requireRootPath(input.root);
-        return runCadreSdlc(buildCreateGateIssuesGitlabArgs(input, root), root);
+        return runCadreSdlcAllowingReportExitCodes(buildCreateGateIssuesGitlabArgs(input, root), root);
       },
     }),
   );
@@ -1079,7 +1097,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
       execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
         const input = SdlcCreateGithubGateIssuesInput.parse(rawInput);
         const root = requireRootPath(input.root);
-        return runCadreSdlc(buildCreateGithubGateIssuesArgs(input, root), root);
+        return runCadreSdlcAllowingReportExitCodes(buildCreateGithubGateIssuesArgs(input, root), root);
       },
     }),
   );

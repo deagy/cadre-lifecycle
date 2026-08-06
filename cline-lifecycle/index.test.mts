@@ -6,7 +6,14 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { AgentTool } from "@cline/sdk";
-import { plugin, type SetupApi, type SetupContext } from "./index.ts";
+import {
+  plugin,
+  type SetupApi,
+  type SetupContext,
+  buildPublishGateStatusArgs,
+  buildCreateGateIssuesGitlabArgs,
+  buildRequestGateReviewersGitlabArgs,
+} from "./index.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -301,6 +308,113 @@ describe("cadre-lifecycle plugin", () => {
     ).rejects.toThrow(/root/i);
   });
 
+  describe("argument construction (kernel-free)", () => {
+    // These assert the exact argv built for the kernel subprocess directly,
+    // with no subprocess call at all -- unlike the "real subprocess calls"
+    // tests below, these can't be fooled by a missing/stale kernel binary
+    // into passing vacuously, and are the right tool for asserting a
+    // branch/join was built correctly rather than merely "didn't throw".
+    // Covers two gaps a prior review round found untested: the
+    // sdlc_publish_gate_status discriminated union's GitHub branch (only
+    // the GitLab branch had any coverage, even at the smoke-test level),
+    // and the `gates` array -> comma-separated `--gates` string join shared
+    // by several builders (buildCreateGateIssuesGitlabArgs and
+    // buildRequestGateReviewersGitlabArgs here stand in for all of them --
+    // the join is the exact same one-line expression at every call site).
+
+    it("buildPublishGateStatusArgs (gitlab branch) emits --project-path/--mr-iid, not --repo/--pr", () => {
+      const args = buildPublishGateStatusArgs(
+        {
+          forge: "gitlab",
+          taskId: "t1",
+          projectPath: "group/project",
+          mrIid: 7,
+          asBot: "bot",
+          apply: true,
+        },
+        "/root",
+      );
+      expect(args).toEqual([
+        "sdlc",
+        "publish-gate-status",
+        "--root",
+        "/root",
+        "--task-id",
+        "t1",
+        "--forge",
+        "gitlab",
+        "--project-path",
+        "group/project",
+        "--mr-iid",
+        "7",
+        "--as-bot",
+        "bot",
+        "--apply",
+      ]);
+    });
+
+    it("buildPublishGateStatusArgs (github branch) emits --repo/--pr, not --project-path/--mr-iid", () => {
+      const args = buildPublishGateStatusArgs(
+        {
+          forge: "github",
+          taskId: "t1",
+          repo: "owner/repo",
+          pr: 9,
+          asBot: "bot",
+          allowClassification: "internal",
+        },
+        "/root",
+      );
+      expect(args).toEqual([
+        "sdlc",
+        "publish-gate-status",
+        "--root",
+        "/root",
+        "--task-id",
+        "t1",
+        "--forge",
+        "github",
+        "--repo",
+        "owner/repo",
+        "--pr",
+        "9",
+        "--as-bot",
+        "bot",
+        "--allow-classification",
+        "internal",
+      ]);
+      expect(args).not.toContain("--project-path");
+      expect(args).not.toContain("--mr-iid");
+    });
+
+    it("buildCreateGateIssuesGitlabArgs joins a gates array into a single comma-separated --gates value", () => {
+      const args = buildCreateGateIssuesGitlabArgs(
+        { taskId: "t1", projectPath: "group/project", asBot: "bot", gates: ["G3", "G9"] },
+        "/root",
+      );
+      const gatesIndex = args.indexOf("--gates");
+      expect(gatesIndex).toBeGreaterThan(-1);
+      expect(args[gatesIndex + 1]).toBe("G3,G9");
+      // Neither element ends up as its own argv entry -- a naive
+      // implementation could pass the array through unjoined.
+      expect(args).not.toContain("G3");
+      expect(args).not.toContain("G9");
+    });
+
+    it("buildRequestGateReviewersGitlabArgs omits --gates entirely when the array is empty or absent", () => {
+      const withEmpty = buildRequestGateReviewersGitlabArgs(
+        { taskId: "t1", projectPath: "group/project", mrIid: 1, asBot: "bot", gates: [] },
+        "/root",
+      );
+      const withAbsent = buildRequestGateReviewersGitlabArgs(
+        { taskId: "t1", projectPath: "group/project", mrIid: 1, asBot: "bot" },
+        "/root",
+      );
+      expect(withEmpty).not.toContain("--gates");
+      expect(withAbsent).not.toContain("--gates");
+    });
+  });
+
   describe("real bin/cadre sdlc subprocess calls", () => {
     // These exercise the actual CLI path (same convention as cline/'s own
     // index.test.mts): the local environment used to develop this plugin
@@ -520,7 +634,7 @@ describe("cadre-lifecycle plugin", () => {
         expect(result).toBeTypeOf("object");
       });
 
-      it("sdlc_publish_gate_status returns a structured result, not a throw", async () => {
+      it("sdlc_publish_gate_status (gitlab) returns a structured result, not a throw", async () => {
         const tools = await registerTools(REPO_ROOT);
         const result = (await findTool(tools, "sdlc_publish_gate_status").execute(
           {
@@ -528,6 +642,22 @@ describe("cadre-lifecycle plugin", () => {
             taskId: "cline-lifecycle-test-nonexistent-task",
             projectPath: "cline-lifecycle-test/project",
             mrIid: 1,
+            asBot: "cline-lifecycle-test-bot",
+            allowClassification: "internal",
+          },
+          {} as never,
+        )) as Record<string, unknown>;
+        expect(result).toBeTypeOf("object");
+      });
+
+      it("sdlc_publish_gate_status (github) returns a structured result, not a throw", async () => {
+        const tools = await registerTools(REPO_ROOT);
+        const result = (await findTool(tools, "sdlc_publish_gate_status").execute(
+          {
+            forge: "github",
+            taskId: "cline-lifecycle-test-nonexistent-task",
+            repo: "cline-lifecycle-test/repo",
+            pr: 1,
             asBot: "cline-lifecycle-test-bot",
             allowClassification: "internal",
           },

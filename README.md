@@ -29,7 +29,7 @@ flowchart TB
 .                               # cadre plugin's own root
 ├── cline/                     # Cline plugin (agents_select tool call)
 ├── cline-agents/              # Cline plugin (71 Cadre role presets, dispatchable subagents)
-├── cline-lifecycle/           # Cline plugin (sdlc_init/validate/status/decide tools)
+├── cline-lifecycle/           # Cline plugin (20 sdlc_* tools: 4 forge-agnostic, 16 forge-specific)
 ├── bin/cadre                  # CLI dispatcher for role selection (and lifecycle, if installed)
 ├── agent-catalog.json         # Agent role catalog (generated)
 ├── provider.json              # Agentic SDLC provider bundle (referenced by plugins/lifecycle/)

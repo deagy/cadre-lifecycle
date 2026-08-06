@@ -148,14 +148,20 @@ and the exact `planDigest` value the dry-run returned — never fabricate or
 guess one. If the kernel reports the digest is stale, re-run the dry-run and
 get fresh confirmation rather than retrying blindly.
 
-### `sdlc_request_gate_reviewers_gitlab` / `sdlc_request_gate_reviewers_github` treat exit code 2 as a normal report, not a failure
+### Four tools treat exit code 2 as a normal report, not a failure
 
-Per their own kernel commands' documented behavior, exit 0 means the report
-completed with no refusals and exit 2 means it completed but contains
-refusals/`withheld-conflict` entries — both are valid reports, not failures,
-and both tools return that report's JSON normally either way. Only a
-genuine structural failure (exit 1: MR/PR not found or closed, an identity
-mismatch) surfaces as this tool's `error` field.
+`sdlc_request_gate_reviewers_gitlab`, `sdlc_request_gate_reviewers_github`,
+`sdlc_create_gate_issues_gitlab`, and `sdlc_create_github_gate_issues` all
+wrap kernel commands where exit 0 means "completed cleanly" and exit 2 means
+"completed, but the result contains refusals" (all four) or "...refusals or
+assignee drift" (the two create-gate-issues commands) — both are valid,
+non-failure reports, not something to retry, and all four tools return that
+report's JSON normally either way, including (for the two create-gate-issues
+tools) the `plan_digest` a subsequent `apply: true` call needs and, in
+`--apply` mode, confirmation of any issue that was already created before the
+refusal was hit. Only a genuine structural failure (exit 1: MR/PR not found
+or closed, an identity mismatch, a malformed request) surfaces as any of the
+four tools' `error` field.
 
 ## Behavioral detail
 
