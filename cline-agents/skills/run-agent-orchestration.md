@@ -458,8 +458,61 @@ agents" and must stay that way (see that repository's `cline/index.ts` tool
 description). **There is currently no
 plugin-registered tool in this repo, and no supported one to add, that
 actually dispatches a named role on Cline** — this is a confirmed gap, not an
-oversight to route around silently:
+oversight to route around silently. A working, *non*-plugin path exists
+today, though its usefulness turns out to be narrower than tool visibility
+alone would suggest — see "MCP registration works for discovery, not for a
+real dispatch" below before falling back to manual injection:
 
+- **MCP registration works for discovery, not for a real dispatch — verified
+  live, both ways, 2026-08-05.** MCP server registration is a host-level
+  Cline feature (`cline mcp add`/the MCP add wizard, writing to
+  `~/.cline/data/settings/cline_mcp_settings.json`), independent of
+  `AgentExtensionApi` and its `registerTool` limitation below — so the same
+  `dispatch_secure_cloud_role`/`dispatch_team`/`dispatch_team_recipe` server
+  documented for Codex CLI above *can* be registered for Cline too, from a
+  full source checkout (not the packaged plugin —
+  `suite/roster/orchestration/mcp/dispatch_server.py` and its
+  `requirements-mcp.txt` pin are only present there):
+  1. `cline mcp add --yes agents-dispatch -- <repo>/bin/cadre
+     mcp-dispatch-server` registers cleanly with no warnings, and a live
+     `cline -p` session correctly lists all three tools in its toolset,
+     namespaced `agents-dispatch__dispatch_secure_cloud_role`,
+     `agents-dispatch__dispatch_team`, `agents-dispatch__dispatch_team_recipe`.
+  2. A real call needs one more piece registration doesn't set up: the
+     server refuses every dispatch until its own process env has
+     `SECURE_CLOUD_AGENTS_PARENT_CLASSIFICATION` set (fail-closed, not a
+     bug) — confirmed live, `dispatch_secure_cloud_role` returned
+     `{"status": "denied", "reason": "parent classification is not
+     available to this server; the caller must set
+     SECURE_CLOUD_AGENTS_PARENT_CLASSIFICATION before dispatch is usable"}`
+     before this was set. `cline mcp add` has no flag for server env vars;
+     set it by hand-editing an `"env"` object into the registered server's
+     `transport` block in `cline_mcp_settings.json` (`McpStdioTransportConfig`
+     in `@cline/core`'s types confirms `env` belongs there, sibling to
+     `command`/`args`), e.g. `"env": {
+     "SECURE_CLOUD_AGENTS_PARENT_CLASSIFICATION": "internal"}`.
+  3. With that set, a real `dispatch_secure_cloud_role` call for
+     `code-reviewer` (default `planning-review-only` mode) still failed —
+     with `{"error":"MCP request timed out for \"agents-dispatch\"
+     (tools/call).\"}"}` after ~5 seconds. Traced into the installed
+     `@cline/core@0.0.65` bundle (CLI 3.0.47): every `tools/call` request
+     uses a hardcoded 5000ms timeout (`uz=5000` in the minified bundle) with
+     no override — `McpStdioTransportConfig` has no `timeout` field, and no
+     `CLINE_MCP_*` env var exists for it either. `dispatch_secure_cloud_role`
+     synchronously waits on a spawned `codex exec` child process
+     (`spawn_and_wait()`, described in the Codex CLI section above); any
+     real task takes well over 5 seconds, so **this will always time out
+     client-side today, regardless of whether the dispatch itself would
+     have succeeded.** No orphaned `dispatch_server.py`/`codex exec`
+     process was left behind afterward, so at least the failure is clean
+     rather than a leaked background job.
+  - **Net effect:** this path is real and gives you tool discovery and
+    fast fail-closed checks (like the classification denial), but cannot
+    currently complete an actual dispatch through Cline's native MCP
+    client. Until Cline exposes a per-server or per-call timeout override,
+    treat `dispatch_secure_cloud_role`/`dispatch_team`/
+    `dispatch_team_recipe` as **not usable end to end from Cline** and use
+    manual injection below instead.
 - **Why a plugin can't dispatch.** A Cline plugin's `setup(api, ctx)` only
   receives `AgentExtensionApi`, whose surface is `registerTool`,
   `registerCommand`, `registerRule`, `registerMessageBuilder`,
@@ -481,8 +534,11 @@ oversight to route around silently:
   `registerTool`/`executeTool` RPC calls (confirmed by reading the
   `@cline/core` bundle), so even a plugin tool's `execute()` body has no
   in-process handle to the running session's `AgentTeamsRuntime`.
-- **Ordinary single-role dispatch today: manual injection, same shape as
-  Codex's fallback below.** There is no Cline-native generated wrapper for
+- **Today's actual path: manual injection, same shape as Codex's fallback
+  below** (not really a "fallback" on Cline — the MCP path above is verified
+  unusable end to end, per its timeout finding, so this is the primary
+  route, not a backup for when registration was skipped). There is no
+  Cline-native generated wrapper for
   this repo's roles yet — `.clinerules/` here holds one general pointer file
   to `AGENTS.md`/this repository's runbook, not per-role definitions (see
   `AGENTS.md`'s project-structure note), and this repo does not generate
