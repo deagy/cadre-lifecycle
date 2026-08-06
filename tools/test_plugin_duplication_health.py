@@ -14,6 +14,13 @@ plugins/lifecycle/tools/bootstrap_sdlc.py (or its test, or one of the three
 duplicated skills) that isn't mirrored into both forge plugins would
 otherwise only be caught by a human noticing, if ever.
 
+If this test fails, the fix is to re-sync the drifted copy, not to remove the
+duplication: the duplication itself is the accepted architectural tradeoff
+that buys per-forge self-sufficiency (see AGENTS.md's plugin-split
+rationale and CHANGELOG.md's v0.7.0 entry, which introduced it deliberately
+by removing cadre-lifecycle-github/-gitlab's prior dependency on
+cadre-lifecycle-core).
+
     python3 -m unittest discover -s tools -p "test_*.py"
 """
 

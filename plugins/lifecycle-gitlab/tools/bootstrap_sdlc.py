@@ -29,6 +29,16 @@ Never reinstalls over an existing `agentic-sdlc` the human already has on
 outside this plugin's supported range -- it reports the mismatch and stops,
 the same fail-closed posture as `bin/cadre sdlc` itself, rather than
 guessing which install the human intended to keep.
+
+This file is an intentional duplicate, not copy-paste debt:
+`plugins/lifecycle/tools/bootstrap_sdlc.py` is the source, and
+`plugins/lifecycle-github/tools/bootstrap_sdlc.py` and
+`plugins/lifecycle-gitlab/tools/bootstrap_sdlc.py` are self-sufficiency
+copies of it so each forge plugin needs no dependency on the others (see
+AGENTS.md's plugin-split rationale). Keep all three in sync when editing;
+only the four example-invocation lines above are expected to differ between
+copies, and `tools/test_plugin_duplication_health.py` enforces exactly
+that.
 """
 
 from __future__ import annotations

@@ -177,6 +177,20 @@ agentic-sdlc validate --task <task-id>
 
 The kernel's LangGraph engine drives tasks through the lifecycle as a compiled graph, with author/reviewer dispatch, gate sequencing, and separation-of-duties enforcement as graph control flow.
 
+### CI/CD Integration
+
+A consuming project can fail its own pipeline on an unmet gate instead of relying on a human noticing. `agentic-sdlc validate` is fail-closed — it exits non-zero if any required decision is unresolved — so a pipeline job just needs to run it (via `bin/cadre sdlc`, the same wrapper the lifecycle plugins' skills use, or the already-installed `agentic-sdlc` binary directly):
+
+```sh
+# Fail the job if this task's lifecycle gates aren't all resolved
+bin/cadre sdlc validate --root . || exit 1
+
+# Or check one task's current gate state without failing the job
+bin/cadre sdlc status --root . --task-id <task-id>
+```
+
+This is a repository-side pipeline step, not something this repository's own CI runs — it belongs in the *consuming* project's `.github/workflows/` or `.gitlab-ci.yml`, gating merge/deploy on the same gate state `cadre-lifecycle-github`/`cadre-lifecycle-gitlab`'s skills already surface conversationally.
+
 ## Architecture
 
 This project combines two independent upstream systems (see the diagram above for how the resulting 4 plugins relate):
