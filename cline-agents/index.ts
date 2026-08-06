@@ -21,6 +21,7 @@ import {
 } from "@cline/sdk";
 import YAML from "yaml";
 import { z } from "zod";
+import { safeJsonStringify } from "@cline/shared";
 
 // ---------------------------------------------------------------------------
 // About this plugin
@@ -51,6 +52,33 @@ import { z } from "zod";
 // See this plugin's README.md for the full quick-start, tools table, and
 // model-tier table (including an explicit caveat on the unverified `haiku`
 // model id).
+
+// ---------------------------------------------------------------------------
+// Serialization safety
+// ---------------------------------------------------------------------------
+//
+// Sanitize tool results to ensure they are fully JSON-serializable without
+// circular references, hidden properties, or non-JSON values (functions,
+// symbols, undefined). Uses the SDK's safeJsonStringify which detects and
+// replaces cycles with "[Circular]" rather than throwing. Mirrors the
+// identical function in cline/index.ts -- the `agents_select` tool there
+// uses it, and `dispatch_selected_roles` here needs the same protection
+// because its return value also flows through the same Cline SDK serialization
+// path that can encounter injected cyclic references.
+
+/**
+ * Sanitize a tool result to ensure it is fully JSON-serializable without
+ * circular references, hidden properties, or non-JSON values (functions,
+ * symbols, undefined). Uses the SDK's safeJsonStringify which detects and
+ * replaces cycles with "[Circular]" rather than throwing.
+ */
+function sanitizeToolResult(input: unknown): Record<string, unknown> {
+  try {
+    return JSON.parse(safeJsonStringify(input)) as Record<string, unknown>;
+  } catch {
+    return { error: "dispatch_selected_roles failed: result could not be serialized" };
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -992,6 +1020,7 @@ export {
   formatKnowledgeInstructions,
   countFlaggedPassages,
   shouldRetrieveKnowledge,
+  sanitizeToolResult,
   HANDOFFS_DIR,
   type AgentDefinition,
   type KnowledgeContextRequest,
@@ -1166,14 +1195,14 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
 
         const status = plan.dispatch_disposition?.status;
         if (status !== "staffed") {
-          return {
+          return sanitizeToolResult({
             plan,
             dispatched: [],
             note:
               `dispatch_disposition.status is "${status ?? "unknown"}"` +
               (plan.dispatch_disposition?.reason ? `: ${plan.dispatch_disposition.reason}` : "") +
               " -- nothing was dispatched. See the returned plan for what the selector actually found.",
-          };
+          });
         }
 
         const roleIds = [...new Set([...(plan.agents?.primary ?? []), ...(plan.agents?.reviewers ?? [])])];
@@ -1220,7 +1249,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
           }),
         );
 
-        return { plan, dispatched: results };
+        return sanitizeToolResult({ plan, dispatched: results });
       },
     }) as AgentTool<unknown, unknown>,
   );
