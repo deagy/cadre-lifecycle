@@ -15,6 +15,16 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.9.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.1) - 2026-08-06
+
+### Fixed
+
+- **Synced register content that had been sitting unapplied since `deagy/cadre` v0.13.0/v0.14.0**, via this repository's new release-triggered regeneration bot (see 0.9.0's entry) — the first real run of that automation. Consumer-visible content that reaches installed plugins with this release:
+  - New `gitlab_issue_or_comment_write`/`gitlab_wiki_write`/`gitlab_approval_issue_state_change` autonomy policy entries added to all 71 role wrappers (from `cadre`'s GitLab evidence MCP server, which existing installs previously had no autonomy policy for at all).
+  - A new `gitlab-evidence` route in the packaged routing table, and a new `suite/roster/orchestration/mcp/SECURITY-CONTROLS.md` plus a defense-in-depth audit-key backstop in `dispatch_core.py` (`content`/`body`/`description` now always redacted from audit records, not just documented as forbidden).
+  - The `roster/README.md`/`RUNBOOK.md`/`shared/README.md`/`workflows/*.md` documentation restructure (tables, deduplication, verified Mermaid diagrams) from `cadre` v0.14.0.
+- **Regeneration also surfaced a real gap in this repository's own automation**: `regenerate.yml`'s first live run correctly generated, diffed, and pushed the regeneration branch, but failed to open the PR — this repository's "Allow GitHub Actions to create and approve pull requests" setting was off, so the default `GITHUB_TOKEN` `peter-evans/create-pull-request` uses was rejected by the GitHub API. Fixed by enabling that repository setting (affects every workflow's default token here, not only `regenerate.yml`).
+
 ## [0.9.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.0) - 2026-08-06
 
 ### Added
