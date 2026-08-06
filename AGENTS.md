@@ -8,6 +8,7 @@ This repository combines two independent upstream systems and packages them as *
 - **Agentic SDLC** (lifecycle governance, plugins `cadre-lifecycle-core`/`-github`/`-gitlab`): G1–G10 gate schemas, run-record validation, gate authority. External dependency, not vendored — the separately installed `agentic-sdlc` CLI from [deagy/agentic-sdlc](https://github.com/deagy/agentic-sdlc), invoked via `bin/cadre sdlc`. `plugins/lifecycle-github/` and `plugins/lifecycle-gitlab/` are entirely hand-authored here (including their own bundled onboarding/gate-review/pending-gates-briefing skill copies and kernel bootstrap script — hand-maintained duplicates of `cadre-lifecycle-core`'s register-generated equivalents, kept in sync via `tools/test_plugin_duplication_health.py`); the register has no concept of them.
 - **Cline plugin** (`cline/`): hand-authored TypeScript plugin exposing the `agents_select` tool call, belonging to the `cadre` plugin.
 - **Cline Agents plugin** (`cline-agents/`): a distinct, hand-authored TypeScript plugin that ports the 71 Cadre catalog roles into Cline SDK agent presets a Cline session can dispatch as background subagents — a static, one-time port of `agents/*.md`, not a live sync.
+- **Cline Lifecycle plugin** (`cline-lifecycle/`): a third, hand-authored TypeScript plugin exposing G1–G10 Agentic SDLC lifecycle governance as 4 tool calls (`sdlc_init`/`sdlc_validate`/`sdlc_status`/`sdlc_decide`), wrapping the exact `bin/cadre sdlc <subcommand>` invocations the lifecycle plugins' skills already document for Claude Code/Codex. Requires the external `agentic-sdlc` kernel to be installed separately.
 
 Keep role definitions and `agent-catalog.json` synchronized when adding or changing agents. Regenerate the packaged plugin from the register before review — see README.md's "Regenerating Assets" for the exact procedure and its hand-authored exceptions (`README.md` itself, `plugins/lifecycle/{.claude-plugin,.codex-plugin,tools}/`, and all of `plugins/lifecycle-github/`, `plugins/lifecycle-gitlab/`).
 
@@ -33,6 +34,13 @@ For the Cline Agents plugin:
 ```sh
 cd cline-agents && npm test
 cd cline-agents && npm run typecheck
+```
+
+For the Cline Lifecycle plugin:
+
+```sh
+cd cline-lifecycle && npm test
+cd cline-lifecycle && npm run typecheck
 ```
 
 For plugin-versioning/release tooling and the lifecycle plugins' bootstrap scripts (`cadre-lifecycle-core`'s, plus `cadre-lifecycle-github`'s and `cadre-lifecycle-gitlab`'s own hand-maintained copies):
