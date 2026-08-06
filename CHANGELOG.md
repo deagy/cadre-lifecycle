@@ -15,6 +15,12 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.9.3](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.3) - 2026-08-06
+
+### Fixed
+
+- **`cline plugin install https://github.com/deagy/cadre-lifecycle --force` no longer fails with `Cannot find module 'vitest'`** (#25). Cline's plugin installer runs `npm install` without `devDependencies`, then syncs MCP servers using each sub-package's `tsconfig.json` `include` set. `cline-agents/tsconfig.json` was the only one of the three plugin packages whose `include` also pulled in `test/**`, so Cline's sync step tried to load `test/presets.test.ts`, which imports the never-installed `vitest`. Narrowed `cline-agents/tsconfig.json` back to `["*.ts"]`, matching `cline/` and `cline-lifecycle/`, and moved the test-inclusive program into a new `tsconfig.test.json` used only by the `typecheck` script, so CI still typechecks the test suite.
+
 ## [0.9.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.2) - 2026-08-06
 
 ### Fixed
