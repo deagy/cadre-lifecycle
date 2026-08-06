@@ -30,9 +30,6 @@ jobs:
     name: cline/ (npm test, typecheck)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: cline
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,10 +38,16 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: cline/package-lock.json
+          cache-dependency-path: package-lock.json
+      # package.json declares npm workspaces (cline, cline-agents,
+      # cline-lifecycle) backed by a single root package-lock.json, so
+      # `npm ci` must run from the repo root -- a per-directory lockfile no
+      # longer exists.
       - run: npm ci
       - run: npm test
+        working-directory: cline
       - run: npm run typecheck
+        working-directory: cline
 
   cline-agents-plugin:
     name: cline-agents/ (npm test, typecheck)
@@ -76,10 +79,13 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: cline-agents/package-lock.json
+          cache-dependency-path: package-lock.json
+      # package.json declares npm workspaces (cline, cline-agents,
+      # cline-lifecycle) backed by a single root package-lock.json, so
+      # `npm ci` must run from the repo root -- a per-directory lockfile no
+      # longer exists.
       - name: npm ci
         if: steps.probe.outputs.present == 'true'
-        working-directory: cline-agents
         run: npm ci
       - name: npm test
         if: steps.probe.outputs.present == 'true'
@@ -94,9 +100,6 @@ jobs:
     name: cline-lifecycle/ (npm test, typecheck)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: cline-lifecycle
     steps:
       - uses: actions/checkout@v4
         with:
@@ -105,10 +108,16 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: cline-lifecycle/package-lock.json
+          cache-dependency-path: package-lock.json
+      # package.json declares npm workspaces (cline, cline-agents,
+      # cline-lifecycle) backed by a single root package-lock.json, so
+      # `npm ci` must run from the repo root -- a per-directory lockfile no
+      # longer exists.
       - run: npm ci
       - run: npm test
+        working-directory: cline-lifecycle
       - run: npm run typecheck
+        working-directory: cline-lifecycle
 
   python-tools:
     name: tools/ and plugins/*/tools (unittest)

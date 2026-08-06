@@ -4,6 +4,11 @@
   "private": true,
   "description": "Combined Cadre role selection and Agentic SDLC lifecycle governance",
   "type": "module",
+  "workspaces": [
+    "cline",
+    "cline-agents",
+    "cline-lifecycle"
+  ],
   "keywords": [
     "cadre",
     "lifecycle-governance",
