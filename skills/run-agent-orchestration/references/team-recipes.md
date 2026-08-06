@@ -138,3 +138,60 @@ yourself as the orchestrating session. For the debugging recipe specifically:
 collect each spawned instance's hypothesis and evidence, then reason about
 contradictions between them yourself before proposing a fix — Codex has no
 way to let the instances do that directly.
+
+## On Cline
+
+Same fundamental limit as Codex — native `/team` on Cline is
+coordinator-prompt-driven, not persona-addressable (see
+[runner-adapters.md](runner-adapters.md)'s "## Cline" section), so it cannot
+spawn a named `agents:<role-id>` teammate directly either. Unlike Codex,
+though, `communication_mode: "peer"` can be genuinely approximated here,
+because the `cline-agents/` plugin (a distinct plugin from the plan-only
+`cline/`) embeds its own `ClineCore` session manager rather than depending on
+the host session's team primitives — see `cline-agents/index.ts`'s
+`dispatch_selected_roles`, `start_subagent`, and `save_handoff`/
+`read_handoff` tools. This section is more detailed than "## On Codex CLI"
+above deliberately, not by drift: Codex has no mechanism-specific detail to
+add (it degrades to a plain wave, full stop), while Cline has a real,
+distinct dispatch mechanism worth documenting precisely.
+
+**Dispatch mechanism** (not a role list — see the recipe's own **Roles**
+above for that): dispatch the same role list the same way any other Cline
+dispatch works — one `dispatch_selected_roles` call for the roles `cadre
+select` already staffed, or individual `start_subagent` calls (`preset:
+<role-id>`) when a specific team composition is already decided, e.g. the
+debugging recipe's 2-4 named-hypothesis instances of `debugging-engineer`.
+
+**Selector trigger**: identical to the description above — this is purely a
+dispatch-mechanism difference, not a routing difference. `cadre select`'s
+`teams` field means the same thing regardless of runner.
+
+**Each teammate's focus**: identical to the recipe's own description above.
+
+**Synthesis (peer-visibility approximation)**: `start_subagent`/
+`dispatch_selected_roles` return session IDs immediately and run
+teammates as independent background sessions — there is no built-in
+mailbox between them the way native Agent Teams provides on Claude Code.
+Approximate cross-teammate visibility with the handoff store: have each
+teammate `save_handoff` its findings/hypothesis/evidence under a
+task-scoped path (e.g. `<task-id>/<role-id>.md`), then either (a) for the
+parallel-review and cross-stack-build teams, `read_handoff` each path
+yourself as the orchestrating session once all teammates report back and
+synthesize, same as the Codex fallback above; or (b) for the
+competing-hypotheses debugging team specifically, where teammates are
+supposed to actively challenge each other mid-investigation rather than
+just report independently, message a running teammate via
+`message_subagent` with the current contents of the others' handoff files
+so it can respond to their evidence. `message_subagent` queues the
+follow-up and returns immediately — poll `get_subagent` for the reply (or
+rely on its default `notifyParent: true` to have the outcome pushed back
+to you) rather than expecting a synchronous response. This is the closest
+approximation to peer challenge available without native Agent Teams, but
+it is orchestrator-relayed in substance (you are forwarding content
+between sessions), not truly peer-to-peer; describe it that way in your
+final report rather than claiming `communication_mode: "peer"` ran
+unmodified.
+
+**Guardrail / Gates**: identical to the recipe's own description above —
+dispatch mechanism does not change gate applicability or approval
+authority.

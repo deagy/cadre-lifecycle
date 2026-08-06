@@ -326,9 +326,14 @@ rather than removing it:
   how to split the work — there is no CLI flag, `/team` argument, or SDK
   parameter that names a specific `agents:<role-id>` persona as a teammate.
   Team state (task board, mailbox, mission log) persists under
-  `~/.cline/data/teams/[team-name]/` across sessions. For this skill's
-  "Dispatch in Waves" / team-recipe cases (see
-  [team-recipes.md](team-recipes.md)) on Cline:
+  `~/.cline/data/teams/[team-name]/` across sessions. **Prefer
+  `cline-agents/`'s `dispatch_selected_roles`/`start_subagent` plus
+  `save_handoff`/`read_handoff` over native `/team` for this skill's
+  "Dispatch in Waves" / team-recipe cases** — see
+  [team-recipes.md](team-recipes.md)'s "## On Cline" section for the full
+  per-recipe approximation (persona-addressable, unlike native `/team`
+  below). Fall back to native `/team` only when `cline-agents/` isn't
+  installed:
   1. Start (or resume) the team with a mission prompt that explicitly lists
      the recipe's roles by name and pastes (or points at) each role's
      `AGENT.md` persona text/scope, since the coordinator has no other way to
