@@ -15,7 +15,62 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
-## [Unreleased]
+## [0.8.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.8.0) - 2026-08-05
+
+### Added
+
+- **A new plugin, `cline-agents`, ports all 71 Cadre catalog roles into
+  dispatchable Cline SDK subagent presets.** Distinct from the existing
+  `cline` plugin (which only exposes `agents_select`, a routing-plan tool
+  with no ability to spawn agents itself) — `cline-agents` lets a host Cline
+  session actually dispatch a role as a subagent that does real work, built
+  on the `agents-squad` reference pattern (`start_subagent`/
+  `message_subagent`/`get_subagent`/`list_agent_presets`/`list_skills`/
+  `get_skill`/`save_handoff`/`read_handoff`). Adds three hardenings beyond
+  the reference example: real per-tool enforcement via `toolPolicies`
+  (deny-by-default) plus `mode:"plan"` for the 28 read-only roles, so a
+  ported `security-reviewer` (`Read`/`Grep`/`Glob` only in the source
+  catalog) can't silently gain `Bash`/`Edit`/`Write`; reserved bundled role
+  names, so a project- or global-tier preset can't impersonate a bundled
+  role by frontmatter name and manufacture false approval/review authority;
+  and preset-only dispatch (no free-form-instructions fallback) with
+  workspace-containment-checked `cwd`. Reviewed independently by
+  security-reviewer, test-engineer, code-reviewer,
+  supply-chain-security-reviewer, and technical-writer — no High/Critical
+  findings. A static, one-time hand-authored port of this repository's own
+  `agents/*.md`, not wired to auto-regenerate from the Cadre register or
+  from `agents/*.md`; drift risk is named in its own README.
+
+### Fixed
+
+- **`cline-agents/` was undiscoverable from this repository's own top-level docs.** It ships a full Cline plugin (own `package.json`, `npm test`/`npm run typecheck`, 71 dispatchable Cadre role presets) but was mentioned nowhere in README.md's Repository Layout tree or "Running Tests" list, nor in AGENTS.md's component description or command list. Added a `cline-agents/` row to README's layout tree and test commands, and an equivalent component description and test commands to AGENTS.md (the file CLAUDE.md points to as authoritative for commands, so not duplicated there).
+- **`agents_select` could accept or reject the same out-of-taxonomy
+  `classification` value depending on which internal path served the
+  request.** The (now-removed, see below) native LangGraph bridge's
+  `DispatchRequest.validate()` rejected an out-of-taxonomy `classification`
+  unconditionally at parse time, before routing happened — while
+  `build_dispatch_plan.py`, the CLI path's and the actual dispatch source of
+  truth, only rejects it once a task has actually routed to an agent,
+  short-circuiting to "not-applicable" on a needs-triage result without
+  validating classification at all. Same input, opposite outcome depending
+  on which path ran it. Fixed by removing the bridge's own check and
+  deferring entirely to `build_dispatch_plan.py` as the single source of
+  truth. Moot for any consumer as of this release: the entry below removes
+  the native path this divergence lived in, so it can no longer recur by
+  construction rather than merely by fix.
+- **Install instructions embedded in this repository's own shipped
+  `suite/roster/RUNBOOK.md`, and reference URLs across every generated
+  `agents/*.md`/`codex-agents/*.toml` role file, still pointed at the
+  archived `deagy/cadre-plugin` repository instead of this one.** Corrected
+  the `cline plugin install`, `/plugin marketplace add`, and `codex plugin
+  marketplace add` examples and version pins in `RUNBOOK.md` (they were
+  literal copy-paste install commands, not just prose), plus repo-name
+  references throughout the generated `agents/*.md`/`codex-agents/*.toml`
+  files and `suite/`. In the same pass, the corrected text also disclosed a
+  real gap: this repository's `release.yml` does not currently attach a
+  release tarball, SBOM, or attestation the way the archived
+  `deagy/cadre-plugin` repository's release process did — a known
+  regression, not yet closed.
 
 ### Removed
 
@@ -48,10 +103,6 @@ below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/rel
   engine, correctly described elsewhere (README.md's architecture section,
   `suite/roster/RUNBOOK.md`, `skills/run-agent-orchestration/SKILL.md`) and
   left untouched.
-
-### Fixed
-
-- **`cline-agents/` was undiscoverable from this repository's own top-level docs.** It ships a full Cline plugin (own `package.json`, `npm test`/`npm run typecheck`, 71 dispatchable Cadre role presets) but was mentioned nowhere in README.md's Repository Layout tree or "Running Tests" list, nor in AGENTS.md's component description or command list. Added a `cline-agents/` row to README's layout tree and test commands, and an equivalent component description and test commands to AGENTS.md (the file CLAUDE.md points to as authoritative for commands, so not duplicated there).
 
 ## [0.7.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.7.0) - 2026-08-04
 
