@@ -15,6 +15,68 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.9.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.0) - 2026-08-06
+
+### Added
+
+- **A new plugin, `cline-lifecycle`, exposes G1–G10 Agentic SDLC lifecycle
+  governance on Cline as 4 deterministic tool calls** (`sdlc_init`,
+  `sdlc_validate`, `sdlc_status`, `sdlc_decide`), each a thin wrapper around
+  the exact `bin/cadre sdlc <subcommand>` invocation the
+  `cadre-lifecycle-core`/`-github`/`-gitlab` plugins' skills already
+  document for Claude Code/Codex. G1–G10 governance was previously
+  unreachable from Cline at all, since skills are a Claude Code/Codex
+  mechanism with no Cline equivalent. `sdlc_decide` adds no approval logic
+  of its own — the `agentic-sdlc` kernel already structurally refuses a
+  decision from the same identity as a gate's preparer/verifier; this tool
+  only relays that outcome, success or refusal.
+- **`cline-agents` gained `dispatch_selected_roles`**, closing the
+  plan-to-dispatch gap `agents_select`'s own tool description pointed at:
+  it calls `bin/cadre select` (the same authoritative selector) and, if the
+  plan is staffed, immediately dispatches every selected primary/reviewer
+  role in one call, instead of requiring a human/model to read the JSON
+  plan and match role IDs to `start_subagent` calls by hand. Support roles
+  stay advisory and are never auto-dispatched.
+- **`cline-agents` now bundles this repository's own skills**
+  (`list_skills`/`get_skill`), a static port of `skills/*/SKILL.md` with
+  any `references/*.md` content inlined. Previously these tools only read
+  global/project tiers and returned "none" for every skill in this
+  repository, including `run-agent-orchestration` itself.
+- **`dispatch_selected_roles` can retrieve knowledge-store context before
+  dispatch** (`retrieveKnowledge: true`, opt-in — `classification` is
+  caller-asserted, not authenticated, so this does not default on),
+  injecting it into each role's instructions as fenced, labeled untrusted
+  reference material with a trailing authority re-assertion, plus an
+  explicit count of any passage the store's own ingestion-time heuristics
+  flagged as containing instruction-like text. A retrieval failure or
+  timeout for one role never blocks dispatch or broadens access for any
+  role.
+- **`team-recipes.md` documents a Cline-specific approximation for all 3
+  named team recipes**, using `dispatch_selected_roles`/`start_subagent`
+  (persona-addressable, unlike Cline's native `/team`) plus
+  `save_handoff`/`read_handoff` for cross-teammate visibility — explicitly
+  described as orchestrator-relayed in substance, not a claim that
+  `communication_mode: "peer"` runs unmodified on Cline.
+- **Register regeneration is now release-triggered, not purely manual.**
+  When `deagy/cadre` cuts a new tag, it notifies this repository via
+  `repository_dispatch`, which regenerates the packaged plugin content and
+  opens a PR for review — the existing manual procedure in README.md's
+  "Regenerating Assets" remains available as a local-preview/fallback path.
+  The regeneration workflow itself is split into an unprivileged job (which
+  executes `cadre`'s own generator code, read-only token) and a privileged
+  job (which only applies the resulting diff and opens the PR, never
+  executing `cadre`'s code) so a compromised `cadre` revision can't use this
+  automation to push or open anything here on its own.
+
+All of the above were investigated first (see the "Cline feature parity"
+gap analysis referenced in this repository's own history) and then
+implemented across 5 independently reviewed changes; the knowledge-store
+retrieval work in particular went through two review rounds after the first
+found two High-severity findings (untrusted content injected into a
+subagent's system prompt with only a label as control, and retrieval
+defaulting on for a caller-asserted classification) — both fixed and
+re-verified, including by mutation-testing the fix itself.
+
 ## [0.8.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.8.0) - 2026-08-05
 
 ### Added
