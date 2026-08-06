@@ -43,22 +43,37 @@ const CADRE_BIN = path.resolve(PLUGIN_DIR, "..", "bin", "cadre");
 // structurally (see CLAUDE.md's "Human approval invariant"); this tool only
 // relays whatever the kernel decides, success or refusal.
 //
-// The 4 tools above are forge-agnostic. `cadre-lifecycle-gitlab` additionally
-// bundles 8 GitLab-specific skills (lifecycle-review-gitlab,
-// link-source-issue-gitlab, etc. -- see plugins/lifecycle-gitlab/skills/) for
-// Claude Code / Codex, driving GitLab-specific kernel subcommands the 4 tools
-// above have no access to. This plugin closes that same gap for the 4
-// subcommands that actually touch GitLab (`approve-from-gitlab`,
-// `approve-from-gitlab-mr`, `link-intent-from-gitlab-issue`,
-// `link-requirements-from-gitlab-issue`) with 4 more tool calls below,
-// following the exact same convention: deterministic argument-building and
-// JSON pass-through, no approval or linking logic of this plugin's own. The
-// remaining GitLab-lifecycle skills (gitlab-gate-tracking,
-// publish-gate-status-gitlab, report-gate-reviewers-gitlab,
-// brief-pending-gates-gitlab) are read-only/advisory or issue-publishing
-// conveniences layered on top of gate state this plugin's existing
-// sdlc_status already exposes, not additional kernel subcommands -- they are
-// not mirrored here.
+// The 4 tools above are forge-agnostic. `cadre-lifecycle-gitlab`/`-github`
+// additionally bundle 8 forge-specific skills each (lifecycle-review-gitlab,
+// link-source-issue-gitlab, etc. -- see plugins/lifecycle-{gitlab,github}/
+// skills/) for Claude Code / Codex, driving forge-specific kernel
+// subcommands the 4 tools above have no access to. This plugin closes that
+// same gap with the tool calls below, one per forge-specific kernel
+// subcommand, following the exact same convention throughout: deterministic
+// argument-building and JSON pass-through, no approval/linking/publishing
+// logic of this plugin's own. `brief-pending-gates-gitlab`/`-github` are the
+// only two forge-specific skills NOT mirrored below -- both just wrap
+// `bin/cadre sdlc status`, i.e. exactly what `sdlc_status` above already
+// calls, so there is nothing new to wrap.
+//
+// Several of the tool calls below (everything from sdlc_list_gate_issues_gitlab
+// through sdlc_publish_reviewer_nudge) wrap kernel subcommands
+// (`create-gate-issues`, `list-gate-issues`, `create-github-gate-issues`,
+// `list-github-gate-issues`, `publish-gate-status`, `list-gate-status`,
+// `request-gate-reviewers-gitlab`, `request-gate-reviewers`,
+// `publish-reviewer-nudge`, `list-reviewer-nudge`) that the packaged
+// `plugins/lifecycle-{gitlab,github}/skills/*/SKILL.md` files already
+// document, but that do not exist in every `agentic-sdlc` release within
+// this repository's declared `kernel_compatibility` range (see
+// `provider.json`) -- verified missing (`invalid choice`) against the
+// kernel pinned in this plugin's own development environment at the time
+// these tools were added. This is not a Cline-specific gap: Claude Code and
+// Codex hit the identical "invalid choice" error running the exact same
+// commands their own skills document, against the same kernel. These tools
+// are still added here, structurally complete and ready to work the moment
+// a kernel version that actually ships these subcommands is installed --
+// verify with `agentic-sdlc <subcommand> --help` before relying on any one
+// of them in a given environment.
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -158,6 +173,208 @@ const GitlabIssueLinkInput = z
   })
   .strict();
 
+const SdlcApproveFromGithubInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID the approval applies to (required)."),
+    gate: z.string().min(1).describe("Gate ID, e.g. G1 (required)."),
+    role: z.string().min(1).describe("Authority role recording the approval (required)."),
+    repo: z.string().min(1).describe("GitHub repository, owner/name form (required)."),
+    pr: z.number().int().positive().describe("Pull request number (required)."),
+    reviewId: z.string().min(1).describe("GitHub review identifier (required)."),
+    reviewerLogin: z.string().min(1).describe("GitHub login that authored the review (required)."),
+    commitSha: z.string().min(1).describe("Commit SHA reviewed by the GitHub approval (required)."),
+    decidedAt: z.string().min(1).optional().describe("Optional RFC3339 approval time; defaults to now."),
+  })
+  .strict();
+
+const SdlcApproveFromGithubPrInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID the approval applies to (required)."),
+    gate: z.string().min(1).describe("Gate ID, e.g. G1 (required)."),
+    role: z.string().min(1).describe("Authority role recording the approval (required)."),
+    repo: z.string().min(1).describe("GitHub repository, owner/name form (required)."),
+    pr: z.number().int().positive().describe("Pull request number (required)."),
+    reviewerLogin: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("GitHub login to match; defaults to the authority's GitHub binding."),
+    commitSha: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Optional commit SHA to require when selecting an approved review."),
+  })
+  .strict();
+
+// Shared by every kernel subcommand that accepts an optional `--gates
+// G3,G9` scope filter; a tool caller passes a string array, joined with
+// commas when building CLI args, rather than a pre-formatted CSV string.
+const GatesFilterInput = z
+  .array(z.string().min(1))
+  .optional()
+  .describe('Optional gate subset, e.g. ["G3","G9"]; omit for all eligible gates.');
+
+const GateIssuesListInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID whose tracking issues to list (required)."),
+  })
+  .strict();
+
+const SdlcCreateGateIssuesGitlabInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID to create/reuse GitLab tracking issues for (required)."),
+    projectPath: z.string().min(1).describe("GitLab project path, namespace/project (required)."),
+    asBot: z.string().min(1).describe("Bot/service-account GitLab username the kernel verifies as (required)."),
+    gates: GatesFilterInput,
+    apply: z
+      .boolean()
+      .optional()
+      .describe("Actually create/assign issues. Omit (or false) for a dry-run preview -- the kernel's own default."),
+    planDigest: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Required with apply: true -- the exact planDigest value returned by the preceding dry-run."),
+  })
+  .strict();
+
+const SdlcCreateGithubGateIssuesInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID to create/reuse GitHub tracking issues for (required)."),
+    repo: z.string().min(1).describe("GitHub repository, owner/name form (required)."),
+    asBot: z.string().min(1).describe("Bot/service-account GitHub login the kernel verifies as (required)."),
+    allowClassification: z
+      .string()
+      .min(1)
+      .describe("Must exactly match the task's recorded classification (required)."),
+    gates: GatesFilterInput,
+    allowPublicRepo: z
+      .boolean()
+      .optional()
+      .describe("Only set true once the human has explicitly confirmed the repo is public and accepted that."),
+    apply: z
+      .boolean()
+      .optional()
+      .describe("Actually create/assign issues. Omit (or false) for a dry-run preview -- the kernel's own default."),
+    planDigest: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Required with apply: true -- the exact planDigest value returned by the preceding dry-run."),
+  })
+  .strict();
+
+const SdlcPublishGateStatusInput = z.discriminatedUnion("forge", [
+  z
+    .object({
+      forge: z.literal("gitlab"),
+      root: RootInput.optional(),
+      taskId: z.string().min(1).describe("Task ID whose gate-status note to publish (required)."),
+      projectPath: z.string().min(1).describe("GitLab project path, namespace/project (required)."),
+      mrIid: z.number().int().positive().describe("Merge request internal ID, iid (required)."),
+      asBot: z.string().min(1).describe("Bot/service-account GitLab username the kernel verifies as (required)."),
+      allowClassification: z
+        .string()
+        .min(1)
+        .describe("Must exactly match the task's recorded classification (required)."),
+      apply: z
+        .boolean()
+        .optional()
+        .describe("Actually post/update the note. Omit (or false) for a dry-run preview -- the kernel's own default."),
+    })
+    .strict(),
+  z
+    .object({
+      forge: z.literal("github"),
+      root: RootInput.optional(),
+      taskId: z.string().min(1).describe("Task ID whose gate-status comment to publish (required)."),
+      repo: z.string().min(1).describe("GitHub repository, owner/name form (required)."),
+      pr: z.number().int().positive().describe("Pull request number (required)."),
+      asBot: z.string().min(1).describe("Bot/service-account GitHub login the kernel verifies as (required)."),
+      allowClassification: z
+        .string()
+        .min(1)
+        .describe("Must exactly match the task's recorded classification (required)."),
+      apply: z
+        .boolean()
+        .optional()
+        .describe(
+          "Actually post/update the comment. Omit (or false) for a dry-run preview -- the kernel's own default.",
+        ),
+    })
+    .strict(),
+]);
+
+const SdlcRequestGateReviewersGitlabInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID whose gate reviewer candidates to report (required)."),
+    projectPath: z.string().min(1).describe("GitLab project path, namespace/project (required)."),
+    mrIid: z.number().int().positive().describe("Merge request internal ID, iid (required) -- never auto-discovered."),
+    asBot: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Bot/service-account GitLab username to verify as, if applicable."),
+    allowClassification: z
+      .string()
+      .min(1)
+      .describe("Must exactly match the task's recorded classification (required)."),
+    gates: GatesFilterInput,
+  })
+  .strict();
+
+const SdlcRequestGateReviewersGithubInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID whose gate reviewer candidates to report (required)."),
+    repo: z.string().min(1).describe("GitHub repository, owner/name form (required)."),
+    pr: z.number().int().positive().describe("Pull request number (required) -- never auto-discovered."),
+    asBot: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Bot/service-account GitHub login to verify as, if applicable."),
+    allowClassification: z
+      .string()
+      .min(1)
+      .describe("Must exactly match the task's recorded classification (required)."),
+    gates: GatesFilterInput,
+  })
+  .strict();
+
+const ReviewerNudgeListInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID whose reviewer-nudge ledger entry to list (required)."),
+  })
+  .strict();
+
+const SdlcPublishReviewerNudgeInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID whose reviewer-nudge comment to publish (required)."),
+    repo: z.string().min(1).describe("GitHub repository, owner/name form (required)."),
+    pr: z.number().int().positive().describe("Pull request number (required) -- never auto-discovered."),
+    asBot: z.string().min(1).describe("Bot/service-account GitHub login the kernel verifies as (required)."),
+    allowClassification: z
+      .string()
+      .min(1)
+      .describe("Must exactly match the task's recorded classification (required)."),
+    gates: GatesFilterInput,
+    apply: z
+      .boolean()
+      .optional()
+      .describe("Actually post/update the comment. Omit (or false) for a dry-run preview -- the kernel's own default."),
+  })
+  .strict();
+
 type SdlcInitInputShape = z.infer<typeof SdlcInitInput>;
 type SdlcValidateInputShape = z.infer<typeof SdlcValidateInput>;
 type SdlcStatusInputShape = z.infer<typeof SdlcStatusInput>;
@@ -165,6 +382,16 @@ type SdlcDecideInputShape = z.infer<typeof SdlcDecideInput>;
 type SdlcApproveFromGitlabInputShape = z.infer<typeof SdlcApproveFromGitlabInput>;
 type SdlcApproveFromGitlabMrInputShape = z.infer<typeof SdlcApproveFromGitlabMrInput>;
 type GitlabIssueLinkInputShape = z.infer<typeof GitlabIssueLinkInput>;
+type SdlcApproveFromGithubInputShape = z.infer<typeof SdlcApproveFromGithubInput>;
+type SdlcApproveFromGithubPrInputShape = z.infer<typeof SdlcApproveFromGithubPrInput>;
+type GateIssuesListInputShape = z.infer<typeof GateIssuesListInput>;
+type SdlcCreateGateIssuesGitlabInputShape = z.infer<typeof SdlcCreateGateIssuesGitlabInput>;
+type SdlcCreateGithubGateIssuesInputShape = z.infer<typeof SdlcCreateGithubGateIssuesInput>;
+type SdlcPublishGateStatusInputShape = z.infer<typeof SdlcPublishGateStatusInput>;
+type SdlcRequestGateReviewersGitlabInputShape = z.infer<typeof SdlcRequestGateReviewersGitlabInput>;
+type SdlcRequestGateReviewersGithubInputShape = z.infer<typeof SdlcRequestGateReviewersGithubInput>;
+type ReviewerNudgeListInputShape = z.infer<typeof ReviewerNudgeListInput>;
+type SdlcPublishReviewerNudgeInputShape = z.infer<typeof SdlcPublishReviewerNudgeInput>;
 
 interface SdlcToolError {
   error: string;
@@ -308,6 +535,192 @@ function buildLinkRequirementsFromGitlabIssueArgs(input: GitlabIssueLinkInputSha
   ];
 }
 
+function buildApproveFromGithubArgs(input: SdlcApproveFromGithubInputShape, rootPath: string): string[] {
+  const args = [
+    "sdlc",
+    "approve-from-github",
+    "--root",
+    input.root ?? rootPath,
+    "--task-id",
+    input.taskId,
+    "--gate",
+    input.gate,
+    "--role",
+    input.role,
+    "--repo",
+    input.repo,
+    "--pr",
+    String(input.pr),
+    "--review-id",
+    input.reviewId,
+    "--reviewer-login",
+    input.reviewerLogin,
+    "--commit-sha",
+    input.commitSha,
+  ];
+  if (input.decidedAt) args.push("--decided-at", input.decidedAt);
+  return args;
+}
+
+function buildApproveFromGithubPrArgs(input: SdlcApproveFromGithubPrInputShape, rootPath: string): string[] {
+  const args = [
+    "sdlc",
+    "approve-from-github-pr",
+    "--root",
+    input.root ?? rootPath,
+    "--task-id",
+    input.taskId,
+    "--gate",
+    input.gate,
+    "--role",
+    input.role,
+    "--repo",
+    input.repo,
+    "--pr",
+    String(input.pr),
+  ];
+  if (input.reviewerLogin) args.push("--reviewer-login", input.reviewerLogin);
+  if (input.commitSha) args.push("--commit-sha", input.commitSha);
+  return args;
+}
+
+function buildListGateIssuesGitlabArgs(input: GateIssuesListInputShape, rootPath: string): string[] {
+  return ["sdlc", "list-gate-issues", "--root", input.root ?? rootPath, "--task-id", input.taskId];
+}
+
+function buildCreateGateIssuesGitlabArgs(input: SdlcCreateGateIssuesGitlabInputShape, rootPath: string): string[] {
+  const args = [
+    "sdlc",
+    "create-gate-issues",
+    "--root",
+    input.root ?? rootPath,
+    "--task-id",
+    input.taskId,
+    "--project-path",
+    input.projectPath,
+    "--as-bot",
+    input.asBot,
+  ];
+  if (input.gates?.length) args.push("--gates", input.gates.join(","));
+  if (input.apply) args.push("--apply");
+  if (input.planDigest) args.push("--plan-digest", input.planDigest);
+  return args;
+}
+
+function buildListGithubGateIssuesArgs(input: GateIssuesListInputShape, rootPath: string): string[] {
+  return ["sdlc", "list-github-gate-issues", "--root", input.root ?? rootPath, "--task-id", input.taskId];
+}
+
+function buildCreateGithubGateIssuesArgs(input: SdlcCreateGithubGateIssuesInputShape, rootPath: string): string[] {
+  const args = [
+    "sdlc",
+    "create-github-gate-issues",
+    "--root",
+    input.root ?? rootPath,
+    "--task-id",
+    input.taskId,
+    "--repo",
+    input.repo,
+    "--as-bot",
+    input.asBot,
+    "--allow-classification",
+    input.allowClassification,
+  ];
+  if (input.gates?.length) args.push("--gates", input.gates.join(","));
+  if (input.allowPublicRepo) args.push("--allow-public-repo");
+  if (input.apply) args.push("--apply");
+  if (input.planDigest) args.push("--plan-digest", input.planDigest);
+  return args;
+}
+
+function buildListGateStatusArgs(input: GateIssuesListInputShape, rootPath: string): string[] {
+  return ["sdlc", "list-gate-status", "--root", input.root ?? rootPath, "--task-id", input.taskId];
+}
+
+function buildPublishGateStatusArgs(input: SdlcPublishGateStatusInputShape, rootPath: string): string[] {
+  const args = ["sdlc", "publish-gate-status", "--root", input.root ?? rootPath, "--task-id", input.taskId];
+  if (input.forge === "gitlab") {
+    args.push("--forge", "gitlab", "--project-path", input.projectPath, "--mr-iid", String(input.mrIid));
+  } else {
+    args.push("--forge", "github", "--repo", input.repo, "--pr", String(input.pr));
+  }
+  args.push("--as-bot", input.asBot, "--allow-classification", input.allowClassification);
+  if (input.apply) args.push("--apply");
+  return args;
+}
+
+function buildRequestGateReviewersGitlabArgs(
+  input: SdlcRequestGateReviewersGitlabInputShape,
+  rootPath: string,
+): string[] {
+  const args = [
+    "sdlc",
+    "request-gate-reviewers-gitlab",
+    "--root",
+    input.root ?? rootPath,
+    "--task-id",
+    input.taskId,
+    "--project-path",
+    input.projectPath,
+    "--mr-iid",
+    String(input.mrIid),
+    "--allow-classification",
+    input.allowClassification,
+  ];
+  if (input.asBot) args.push("--as-bot", input.asBot);
+  if (input.gates?.length) args.push("--gates", input.gates.join(","));
+  return args;
+}
+
+function buildRequestGateReviewersGithubArgs(
+  input: SdlcRequestGateReviewersGithubInputShape,
+  rootPath: string,
+): string[] {
+  const args = [
+    "sdlc",
+    "request-gate-reviewers",
+    "--root",
+    input.root ?? rootPath,
+    "--task-id",
+    input.taskId,
+    "--repo",
+    input.repo,
+    "--pr",
+    String(input.pr),
+    "--allow-classification",
+    input.allowClassification,
+  ];
+  if (input.asBot) args.push("--as-bot", input.asBot);
+  if (input.gates?.length) args.push("--gates", input.gates.join(","));
+  return args;
+}
+
+function buildListReviewerNudgeArgs(input: ReviewerNudgeListInputShape, rootPath: string): string[] {
+  return ["sdlc", "list-reviewer-nudge", "--root", input.root ?? rootPath, "--task-id", input.taskId];
+}
+
+function buildPublishReviewerNudgeArgs(input: SdlcPublishReviewerNudgeInputShape, rootPath: string): string[] {
+  const args = [
+    "sdlc",
+    "publish-reviewer-nudge",
+    "--root",
+    input.root ?? rootPath,
+    "--task-id",
+    input.taskId,
+    "--repo",
+    input.repo,
+    "--pr",
+    String(input.pr),
+    "--as-bot",
+    input.asBot,
+    "--allow-classification",
+    input.allowClassification,
+  ];
+  if (input.gates?.length) args.push("--gates", input.gates.join(","));
+  if (input.apply) args.push("--apply");
+  return args;
+}
+
 // ---------------------------------------------------------------------------
 // Sanitization (same convention as cline/index.ts's sanitizeToolResult)
 // ---------------------------------------------------------------------------
@@ -333,6 +746,38 @@ async function runCadreSdlc(args: string[], rootPath: string): Promise<Record<st
   }
 }
 
+// `request-gate-reviewers-gitlab`/`request-gate-reviewers` (per their own
+// SKILL.md docs) exit 0 for "report completed, no refusals", exit 2 for
+// "report completed, contains refusals/withheld-conflict entries -- still
+// valid JSON, not a failure", and exit 1 only for a genuine structural
+// failure (MR/PR not found, identity mismatch). Plain `runCadreSdlc` would
+// discard a real exit-2 report's stdout and misreport it as an opaque
+// error; this variant parses `err.stdout` as JSON first and only falls back
+// to the generic error shape if that fails (the exit-1 case).
+async function runCadreSdlcAllowingReportExitCodes(
+  args: string[],
+  rootPath: string,
+): Promise<Record<string, unknown> | SdlcToolError> {
+  try {
+    const { stdout } = await execFileAsync(CADRE_BIN, args, { cwd: rootPath });
+    return sanitizeToolResult(JSON.parse(stdout));
+  } catch (caught) {
+    const err = caught as { message?: string; stderr?: string; stdout?: string };
+    if (err.stdout) {
+      try {
+        return sanitizeToolResult(JSON.parse(err.stdout));
+      } catch {
+        // Not parseable JSON -- fall through to the generic error shape,
+        // matching runCadreSdlc's own behavior for a genuine failure.
+      }
+    }
+    return sanitizeToolResult({
+      error: [err.stderr?.trim(), err.message].filter(Boolean).join("\n") || "sdlc tool call failed",
+      stderr: err.stderr,
+    }) as SdlcToolError;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Setup and tool registration
 // ---------------------------------------------------------------------------
@@ -348,6 +793,16 @@ export type {
   SdlcApproveFromGitlabInputShape,
   SdlcApproveFromGitlabMrInputShape,
   GitlabIssueLinkInputShape,
+  SdlcApproveFromGithubInputShape,
+  SdlcApproveFromGithubPrInputShape,
+  GateIssuesListInputShape,
+  SdlcCreateGateIssuesGitlabInputShape,
+  SdlcCreateGithubGateIssuesInputShape,
+  SdlcPublishGateStatusInputShape,
+  SdlcRequestGateReviewersGitlabInputShape,
+  SdlcRequestGateReviewersGithubInputShape,
+  ReviewerNudgeListInputShape,
+  SdlcPublishReviewerNudgeInputShape,
   SdlcToolError,
 };
 
@@ -503,6 +958,239 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
         const input = GitlabIssueLinkInput.parse(rawInput);
         const root = requireRootPath(input.root);
         return runCadreSdlc(buildLinkRequirementsFromGitlabIssueArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_approve_from_github",
+      description:
+        "Record a human gate approval from prepared GitHub PR-review evidence, via `bin/cadre sdlc " +
+        "approve-from-github` -- the same command lifecycle-review-github's Step 4a documents for " +
+        "Claude Code / Codex, for when the human already reported the review details rather than " +
+        "having this tool fetch them live from the PR (use sdlc_approve_from_github_pr for that). This " +
+        "tool adds no approval logic of its own: the kernel structurally refuses a decision from the " +
+        "same identity as the gate's preparer/verifier. Never call this on behalf of a human who has " +
+        "not actually recorded the GitHub review being cited.",
+      inputSchema: z.toJSONSchema(SdlcApproveFromGithubInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = SdlcApproveFromGithubInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildApproveFromGithubArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_approve_from_github_pr",
+      description:
+        "Record a human gate approval by fetching and verifying an actual approved GitHub PR review " +
+        "live, via `bin/cadre sdlc approve-from-github-pr` -- the same command lifecycle-review-github's " +
+        "Step 4b documents for Claude Code / Codex. Fails closed if no matching approved review is " +
+        "found on the pull request. This tool adds no approval logic of its own: the kernel " +
+        "structurally refuses a decision from the same identity as the gate's preparer/verifier.",
+      inputSchema: z.toJSONSchema(SdlcApproveFromGithubPrInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = SdlcApproveFromGithubPrInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildApproveFromGithubPrArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_list_gate_issues_gitlab",
+      description:
+        "List a task's existing GitLab gate-tracking issues and their assigned approval sub-issues, " +
+        "via `bin/cadre sdlc list-gate-issues` -- the same command gitlab-gate-tracking's Step 1 " +
+        "documents for Claude Code / Codex. Read-only: never creates or changes anything.",
+      inputSchema: z.toJSONSchema(GateIssuesListInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = GateIssuesListInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildListGateIssuesGitlabArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_create_gate_issues_gitlab",
+      description:
+        "Create (or reuse) one GitLab tracking issue per eligible lifecycle gate, plus a linked " +
+        "approval sub-issue per required authority, assigned to that authority's real GitLab account, " +
+        "via `bin/cadre sdlc create-gate-issues` -- the same command gitlab-gate-tracking's Steps 3-4 " +
+        "document for Claude Code / Codex. Defaults to a dry-run preview (omit `apply`); assigning a " +
+        "real person is consequential and externally visible, so only pass `apply: true` with the exact " +
+        "`planDigest` value the preceding dry-run returned, after the human has explicitly confirmed " +
+        "the assignments shown in that preview -- never fabricate or guess a planDigest.",
+      inputSchema: z.toJSONSchema(SdlcCreateGateIssuesGitlabInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = SdlcCreateGateIssuesGitlabInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildCreateGateIssuesGitlabArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_list_github_gate_issues",
+      description:
+        "List a task's existing GitHub gate-tracking issues and their assigned approval sub-issues, " +
+        "via `bin/cadre sdlc list-github-gate-issues` -- the same command create-github-gate-issues' " +
+        "Step 1 documents for Claude Code / Codex. Read-only: never creates or changes anything.",
+      inputSchema: z.toJSONSchema(GateIssuesListInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = GateIssuesListInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildListGithubGateIssuesArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_create_github_gate_issues",
+      description:
+        "Create (or reuse) one GitHub tracking issue per eligible lifecycle gate, plus a linked " +
+        "approval sub-issue per required authority, assigned to that authority's real GitHub account, " +
+        "via `bin/cadre sdlc create-github-gate-issues` -- the same command create-github-gate-issues' " +
+        "Steps 3-4 document for Claude Code / Codex. Defaults to a dry-run preview (omit `apply`); " +
+        "assigning a real person is consequential and externally visible, so only pass `apply: true` " +
+        "with the exact `planDigest` value the preceding dry-run returned, after the human has " +
+        "explicitly confirmed the assignments shown in that preview -- never fabricate or guess a " +
+        "planDigest. Only set `allowPublicRepo: true` once the human has explicitly confirmed and " +
+        "accepted that the repository is public.",
+      inputSchema: z.toJSONSchema(SdlcCreateGithubGateIssuesInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = SdlcCreateGithubGateIssuesInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildCreateGithubGateIssuesArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_list_gate_status",
+      description:
+        "Show a task's locally-recorded gate-status publication ledger (both GitLab and GitHub " +
+        "entries, if any) without touching either forge, via `bin/cadre sdlc list-gate-status` -- the " +
+        "same command publish-gate-status-gitlab's/-github's Step 1 documents for Claude Code / Codex. " +
+        "Zero-network and can be stale relative to what's actually posted; a convenience, not " +
+        "authoritative. Read-only.",
+      inputSchema: z.toJSONSchema(GateIssuesListInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = GateIssuesListInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildListGateStatusArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_publish_gate_status",
+      description:
+        "Publish (or idempotently update in place) a one-way, read-only gate-status summary note on a " +
+        "task's GitLab MR or GitHub PR, via `bin/cadre sdlc publish-gate-status` -- the same command " +
+        "publish-gate-status-gitlab's/-github's Steps 2-3 document for Claude Code / Codex. This note is " +
+        "never read back as an approval; gate approval remains exclusively `sdlc_decide`/" +
+        "`sdlc_approve_from_gitlab*`/`sdlc_approve_from_github*`. Defaults to a dry-run preview (omit " +
+        "`apply`) -- unlike the gate-tracking-issue tools above there is no plan-digest handshake here " +
+        "since nothing gets assigned to anyone, but still confirm the project/MR or repo/PR and task " +
+        "with the human before passing `apply: true`. `forge` selects which shape (`projectPath`+`mrIid` " +
+        "for GitLab, `repo`+`pr` for GitHub) the remaining fields must take.",
+      inputSchema: z.toJSONSchema(SdlcPublishGateStatusInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = SdlcPublishGateStatusInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildPublishGateStatusArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_request_gate_reviewers_gitlab",
+      description:
+        "Report which GitLab usernames would be set as MR reviewers for a task's lifecycle gates -- " +
+        "read-only/reporting only, never actually sets reviewer_ids -- via `bin/cadre sdlc " +
+        "request-gate-reviewers-gitlab`, the same command report-gate-reviewers-gitlab's Step 1 " +
+        "documents for Claude Code / Codex. The underlying command's own exit code 2 means the report " +
+        "completed but contains refusals/withheld-conflict entries -- this tool still returns that " +
+        "report's JSON normally in that case, exactly as exit 0 would; only a structural failure " +
+        "(exit 1: MR not found/closed/merged, project-path mismatch, `asBot` identity mismatch) " +
+        "surfaces as this tool's `error` field.",
+      inputSchema: z.toJSONSchema(SdlcRequestGateReviewersGitlabInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = SdlcRequestGateReviewersGitlabInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlcAllowingReportExitCodes(buildRequestGateReviewersGitlabArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_request_gate_reviewers_github",
+      description:
+        "Report which GitHub logins would be requested as PR reviewers for a task's lifecycle gates -- " +
+        "read-only/reporting only, never actually requests a review -- via `bin/cadre sdlc " +
+        "request-gate-reviewers`, the same command report-gate-reviewers-github's Step 1 documents for " +
+        "Claude Code / Codex. The underlying command's own exit code 2 means the report completed but " +
+        "contains refusals/withheld-conflict entries -- this tool still returns that report's JSON " +
+        "normally in that case, exactly as exit 0 would; only a structural failure (exit 1: PR not " +
+        "found/closed/merged, repo mismatch, `asBot` identity mismatch) surfaces as this tool's `error` " +
+        "field.",
+      inputSchema: z.toJSONSchema(SdlcRequestGateReviewersGithubInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = SdlcRequestGateReviewersGithubInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlcAllowingReportExitCodes(buildRequestGateReviewersGithubArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_list_reviewer_nudge",
+      description:
+        "Show a task's locally-recorded reviewer-nudge publication ledger without touching GitHub, via " +
+        "`bin/cadre sdlc list-reviewer-nudge` -- the same command publish-reviewer-nudge-github's Step 1 " +
+        "documents for Claude Code / Codex. Zero-network and can be stale relative to what's actually " +
+        "posted; a convenience, not authoritative. Read-only. GitHub-only -- there is no GitLab " +
+        "equivalent of this advisory nudge skill.",
+      inputSchema: z.toJSONSchema(ReviewerNudgeListInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = ReviewerNudgeListInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildListReviewerNudgeArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_publish_reviewer_nudge",
+      description:
+        "Publish (or idempotently update in place) an advisory PR comment naming which GitHub logins " +
+        "would be good reviewers for a task's pending gates -- never a formal review request, and never " +
+        "names a withheld-conflict login even in this tool's own result (point the human at " +
+        "`sdlc_request_gate_reviewers_github`'s full report for that) -- via `bin/cadre sdlc " +
+        "publish-reviewer-nudge`, the same command publish-reviewer-nudge-github's Steps 2-3 document " +
+        "for Claude Code / Codex. Defaults to a dry-run preview (omit `apply`); confirm the repo/PR and " +
+        "task with the human before passing `apply: true`. GitHub-only -- there is no GitLab equivalent " +
+        "of this advisory nudge skill.",
+      inputSchema: z.toJSONSchema(SdlcPublishReviewerNudgeInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = SdlcPublishReviewerNudgeInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildPublishReviewerNudgeArgs(input, root), root);
       },
     }),
   );
