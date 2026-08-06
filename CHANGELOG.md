@@ -15,6 +15,12 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.9.6](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.6) - 2026-08-06
+
+### Fixed
+
+- **`dispatch_selected_roles` (`cline-agents`) now sanitizes its tool result against non-JSON-serializable values** before returning it, via a new `sanitizeToolResult()` helper (mirroring the existing pattern in `cline/index.ts`) built on `@cline/shared`'s `safeJsonStringify` (#31). Independent review found the PR's original regression test didn't actually reproduce a cyclic-reference failure and a stray `package-lock.json` version-pin drift on `typescript` had crept in unrelated to the fix; both were corrected before merge — the lockfile now pins `typescript` exactly, and the test suite includes a direct unit test against a genuinely self-referential object with a control assertion proving it would have failed pre-fix.
+
 ## [0.9.5](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.5) - 2026-08-06
 
 ### Added
