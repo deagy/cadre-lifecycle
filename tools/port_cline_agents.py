@@ -148,7 +148,11 @@ APPLICATION_ENGINEER_PORT_NOTE = (
 )
 FAIL_LOUD_EXEMPT_ROLES = {"application-engineer"}
 
-LEAK_RE = re.compile(r"roster/[a-zA-Z0-9_/.-]+|(?<![\w.])\.\./[a-zA-Z0-9_./-]+")
+# Includes `<`/`>` so templated placeholders like `roster/<phase>/<role>/
+# AGENT.md` are caught too -- a prior version of this regex excluded them
+# and both this file's own SKILL_PATH_SUBSTITUTIONS and pre-existing
+# committed content had such a placeholder slip through undetected.
+LEAK_RE = re.compile(r"roster/[a-zA-Z0-9_/.<>-]+|(?<![\w.])\.\./[a-zA-Z0-9_./<>-]+")
 
 
 def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
@@ -293,10 +297,9 @@ SKILL_PATH_SUBSTITUTIONS: list[tuple[str, str]] = [
     ("[`run-agent-orchestration`](../run-agent-orchestration/SKILL.md)", "the `run-agent-orchestration` skill"),
     ("`../run-agent-orchestration/SKILL.md`", "the `run-agent-orchestration` skill"),
     ("../run-agent-orchestration/SKILL.md", "the `run-agent-orchestration` skill"),
-    (
-        "`roster/engineering/backend-engineer/AGENT.md`",
-        "its `roster/<phase>/<role>/AGENT.md` source location",
-    ),
+    ("`roster/engineering/backend-engineer/AGENT.md`", "its own role-definition file"),
+    ("`roster/<domain>/<agent-name>/AGENT.md`", "its own role-definition file"),
+    ("`roster/<phase>/<role>/AGENT.md`", "its own role-definition file"),
     ("`roster/knowledge-store/src/config.py`", "the bundled knowledge-store config-resolution logic"),
     ("roster/knowledge-store/src/config.py", "the bundled knowledge-store config-resolution logic"),
     # A literal runnable shell command, not descriptive prose -- rewriting
@@ -318,6 +321,28 @@ SKILL_PATH_SUBSTITUTIONS: list[tuple[str, str]] = [
     (
         "roster/orchestration/mcp/SECURITY-CONTROLS.md",
         "the bundled MCP dispatch server's security-controls documentation",
+    ),
+    # Two literal runnable shell commands (Codex CLI MCP-server setup
+    # instructions), not descriptive prose -- these describe a register
+    # checkout's own source layout that this bundled plugin doesn't ship,
+    # so rewriting just the path argument would leave a broken,
+    # non-runnable command. Replace the whole instruction, same treatment
+    # as the knowledge-store-test case above; must come before the generic
+    # bare-path rules below since those are shorter and would otherwise
+    # partially consume these first.
+    (
+        "1. `pip install -r roster/orchestration/mcp/requirements-mcp.txt` (installs\n"
+        "       the official `mcp` SDK; stdio transport only — do not add a networked\n"
+        "       extra).",
+        "1. Install the official `mcp` SDK (stdio transport only — do not add a networked extra) "
+        "if working from a checkout of the source register (this bundled plugin does not ship "
+        "the MCP dispatch server's own dependency pin file).",
+    ),
+    (
+        "directly at `python3 <repo>/roster/orchestration/mcp/dispatch_server.py`",
+        "directly at the bundled MCP dispatch server implementation, if working from a checkout "
+        "of the source register (this bundled plugin does not ship that server as a standalone "
+        "script)",
     ),
     ("`roster/orchestration/mcp/dispatch_server.py`", "the bundled MCP dispatch server implementation"),
     ("roster/orchestration/mcp/dispatch_server.py", "the bundled MCP dispatch server implementation"),

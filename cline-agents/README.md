@@ -24,10 +24,15 @@ Claude Code / Codex regeneration -- see root `README.md`'s "Regenerating
 Assets". It reads this repository's own `agents/*.md`/`skills/*/SKILL.md`
 and rewrites source-repo-relative path references (e.g.
 `` `../../shared/team-profile.yaml` ``) into consumer-neutral prose via a
-fixed lookup table, plus a small number of named per-role exceptions
-(`application-engineer`, `debugging-engineer`, `threat-modeler`,
-`knowledge-store-steward` -- see the script's own `ROLE_OVERRIDES` and
-`APPLICATION_ENGINEER_PORT_NOTE`). It fails loudly (nonzero exit, stopping
+fixed lookup table, plus one-off handling for 4 roles that needed a closer
+look than the generic table: `debugging-engineer` and
+`knowledge-store-steward` via the script's own `ROLE_OVERRIDES`;
+`application-engineer` via its own dedicated code path plus
+`APPLICATION_ENGINEER_PORT_NOTE` (its role text is literally about this
+suite's own tooling, so most of the table doesn't apply to it at all); and
+`threat-modeler`, whose one non-generic rewrite lives directly in the
+shared `PATH_SUBSTITUTIONS` table since the source string it matches is
+unique to that one file. It fails loudly (nonzero exit, stopping
 the regeneration job before any PR opens) on any reference it doesn't
 recognize, rather than silently shipping a leaked path -- extend the script's
 substitution table when that happens, not this README.
@@ -164,7 +169,7 @@ minus the ability to shadow a reserved bundled agent name:
 
 Each source role body ends with an identical appended shared-policy block containing source-repo-relative path references (e.g. `` `../../shared/team-profile.yaml` ``, `roster/shared/README.md`) that resolve inside the *source* Cadre register/catalog layout but would 404 in an arbitrary consumer project. `tools/port_cline_agents.py`'s `PATH_SUBSTITUTIONS` table is the authoritative, current list of every such rewrite -- read that, not this paragraph, for the exact current mapping; duplicating it here would just go stale.
 
-Four roles need a closer look rather than a mechanical rewrite -- `tools/port_cline_agents.py`'s `ROLE_OVERRIDES` and `APPLICATION_ENGINEER_PORT_NOTE` encode these exactly, and the regeneration's own regression test (`tools/test_port_cline_agents.py`) fails if any of them silently reverts to the old committed behavior:
+Four roles need a closer look rather than a purely mechanical rewrite (two via `ROLE_OVERRIDES`, one via a dedicated code path, one via a table entry whose source string is unique to that file -- see `tools/port_cline_agents.py` for exactly which), and the regeneration's own regression test (`tools/test_port_cline_agents.py`) fails if any of them silently reverts to the old committed behavior:
 
 - **`application-engineer`** -- this role's entire purpose is maintaining *this cadre-lifecycle source repository's own tooling* (`roster/catalog.yaml`, `roster/orchestration/routing.yaml`, the `cadre generate-plugin` regeneration flow). Those references, outside the shared-policy block, are the literal subject of the role, so they are left unrewritten with an appended port note: this preset is only meaningful against a checkout of the cadre-lifecycle/cadre register repositories, not an arbitrary consumer project. (Exempt from the script's fail-loud leak check for this reason.)
 - **`debugging-engineer`** -- one bullet named a cadre-suite-internal filename (`` `AGENT.md` ``) for an occasional meta-task within an otherwise general-purpose debugging role. Reworded to describe "an agent definition's authority, catalog/registry registration, ..." generically instead.

@@ -15,7 +15,7 @@ Use this skill when an agent change must be publishable and selectable, not just
 
 For each new or changed agent:
 
-1. Add or update `roster/<domain>/<agent-name>/AGENT.md` with role, inputs, outputs, required checks, authority, escalation, and completion criteria.
+1. Add or update its own role-definition file with role, inputs, outputs, required checks, authority, escalation, and completion criteria.
 2. Add its id to the bundled role catalog's ordering file (dispatch-precedence order), if not already present.
 3. Metadata (`phase`, `capability`, `model`, `codex_model`, `reasoning_effort`, `knowledge_focus`) lives in the `---`-delimited frontmatter at the top of the role's `AGENT.md` (see "Frontmatter-based roles" below): update the frontmatter, then run `cadre generate-role-metadata` to regenerate this repository's bundled role catalog and routing.yaml's `knowledge_focus` block. Do not hand-edit those generated regions -- this repository's bundled role catalog and this repository's bundled routing configuration's `knowledge_focus` block are fully generated output, never an input. Note: this repository's bundled role catalog's regenerated key order always exactly tracks the bundled role catalog's ordering file, but `routing.yaml`'s `knowledge_focus` block does not -- it never reorders an already-present role and always appends a newly-added role's entry at the very end, so don't expect a new role's `knowledge_focus` entry to land near related roles there.
 4. Update or add workflow/runbook examples when the role changes dispatch behavior.

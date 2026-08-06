@@ -158,7 +158,14 @@ class RealRepoRegressionTests(unittest.TestCase):
     plausible against synthetic fixtures above.
     """
 
-    def test_agents_reproduce_committed_content_except_the_3_gitlab_keys(self) -> None:
+    def test_agents_reproduce_committed_content_exactly(self) -> None:
+        # The committed cline-agents/agents/*.md this test compares against
+        # already reflects this converter's own output (including the 3
+        # gitlab_* autonomy keys it deliberately keeps, unlike the old hand
+        # port -- see the commit message / README), so this is a genuine
+        # byte-for-byte equality check, not a fuzzy one: any divergence here
+        # means either the table regressed or committed content drifted
+        # without re-running the converter.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "cline-agents" / "agents").mkdir(parents=True)
@@ -176,19 +183,7 @@ class RealRepoRegressionTests(unittest.TestCase):
                 if not committed_path.is_file():
                     continue
                 committed = committed_path.read_text(encoding="utf-8")
-                if generated == committed:
-                    continue
-                # The only acceptable difference: the 3 gitlab_* keys this
-                # converter now keeps (a deliberate behavior change, not a
-                # regression -- see the commit message / README).
-                stripped_generated = generated
-                for key_line in (
-                    "  gitlab_issue_or_comment_write: on_request\n",
-                    "  gitlab_wiki_write: human_approval\n",
-                    "  gitlab_approval_issue_state_change: never\n",
-                ):
-                    stripped_generated = stripped_generated.replace(key_line, "", 1)
-                if stripped_generated != committed:
+                if generated != committed:
                     mismatches.append(role)
 
             self.assertEqual(mismatches, [], f"Unexpected divergence from committed content: {mismatches}")

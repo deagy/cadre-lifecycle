@@ -75,7 +75,7 @@ the match plainly, for example:
 > This sounds like the `backend` route (this repository's bundled routing configuration)
 > — it matches on `**/*.go` and keywords like "api", "service
 > implementation", "migration". Primary role: `backend-engineer`
-> (its `roster/<phase>/<role>/AGENT.md` source location, phase `build`).
+> (its own role-definition file, phase `build`).
 > Reviewers: `test-engineer`, `code-reviewer`.
 
 If the description spans more than one route (e.g. a change that touches
@@ -147,7 +147,7 @@ selection execution, knowledge retrieval, staged dispatch, and result
 consolidation — do not duplicate that skill's dispatch-wave or
 result-consolidation instructions here. If the user just wants to read a
 role's own authority/inputs/outputs before deciding, point them at that
-role's `AGENT.md` under `roster/<phase>/<role>/AGENT.md` directly (and
+role's `AGENT.md` under its own role-definition file directly (and
 `docs/role-index.md` if present, as a browsable overview across all of
 them).
 

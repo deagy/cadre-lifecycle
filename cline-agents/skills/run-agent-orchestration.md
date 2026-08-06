@@ -324,14 +324,12 @@ authoritative for the *why*.
     which of those guarantees are mechanically enforced and tested). Once
     registered, call it directly instead of `spawn_agent` — no per-file
     reading or manual `developer_instructions` injection needed. Setup:
-    1. `pip install -r the bundled MCP dispatch server's dependency pin file` (installs
-       the official `mcp` SDK; stdio transport only — do not add a networked
-       extra).
+    1. Install the official `mcp` SDK (stdio transport only — do not add a networked extra) if working from a checkout of the source register (this bundled plugin does not ship the MCP dispatch server's own dependency pin file).
     2. Add a server entry to Codex CLI's `config.toml` (global
        `~/.codex/config.toml` or project-local `.codex/config.toml`) pointing
        at `cadre mcp-dispatch-server` (repository-root `bin/cadre`, resolves
        a Python 3.10+ interpreter the same way every other subcommand does) or
-       directly at `python3 <repo>/the bundled MCP dispatch server implementation`
+       directly at the bundled MCP dispatch server implementation, if working from a checkout of the source register (this bundled plugin does not ship that server as a standalone script)
        if `cadre` isn't on `PATH`. The `[mcp_servers]` table syntax below
        (`command`/`args` keys) is verified against Codex CLI's live
        `config-reference` docs (2026-07-28) — `mcp_servers.<id>.command` and
@@ -493,7 +491,7 @@ oversight to route around silently:
   must read the target role's definition itself — its plugin-generated Codex
   wrapper (`.codex/agents/<role-id>.toml`'s `developer_instructions`, or the
   global synced copy `~/.codex/agents/agents-<role-id>.toml`) is the most
-  convenient already-flattened source, or `roster/<phase>/<role>/AGENT.md`
+  convenient already-flattened source, or its own role-definition file
   directly for the canonical text — and inject that content as the task/system
   framing for a fresh chat turn or a spawned sub-agent
   (`use_subagents`/`enableSpawnAgent`, if the host session has that enabled).
