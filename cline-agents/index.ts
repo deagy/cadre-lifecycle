@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -7,6 +8,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import {
   type AgentPlugin,
   type AgentTool,
@@ -57,6 +59,40 @@ import { z } from "zod";
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const BUNDLED_AGENTS_DIR = join(MODULE_DIR, "agents");
 const BUNDLED_SKILLS_DIR = join(MODULE_DIR, "skills");
+// Resolved the same way cline/index.ts resolves its own CADRE_BIN: relative
+// to this plugin module's own location (this plugin sits at cline-agents/,
+// a sibling of cline/, both at this repository's root), never relative to
+// the target workspace -- a bare "./bin/cadre" only works when the
+// workspace happens to be this repository itself.
+const CADRE_BIN = resolve(MODULE_DIR, "..", "bin", "cadre");
+const execFileAsync = promisify(execFile);
+
+// Mirrors cline/index.ts's buildSelectArgs -- small enough, and this plugin
+// has no dependency relationship with cline/ (separate installable
+// plugins/packages), that duplicating the six lines is simpler than
+// introducing a shared package for it.
+function buildSelectArgs(input: DispatchSelectedRolesInputShape, rootPath: string): string[] {
+  const args = ["select", "--root", rootPath, "--task", input.task];
+  if (input.files) args.push("--files", input.files);
+  if (input.base) args.push("--base", input.base);
+  if (input.taskId) args.push("--task-id", input.taskId);
+  if (input.classification) args.push("--classification", input.classification);
+  return args;
+}
+
+interface DispatchPlan {
+  dispatch_disposition?: { status?: string; reason?: string };
+  agents?: { primary?: string[]; reviewers?: string[]; support?: string[] };
+  [key: string]: unknown;
+}
+
+async function runCadreSelect(
+  input: DispatchSelectedRolesInputShape,
+  rootPath: string,
+): Promise<DispatchPlan> {
+  const { stdout } = await execFileAsync(CADRE_BIN, buildSelectArgs(input, rootPath), { cwd: rootPath });
+  return JSON.parse(stdout) as DispatchPlan;
+}
 
 function resolveDefaultHomeDir(): string {
   const envHome = process?.env?.HOME?.trim();
@@ -656,6 +692,7 @@ const StartSubagentInput = z
       .describe("When true or omitted, send the final outcome back to the parent session."),
   })
   .strict();
+type StartSubagentInputShape = z.infer<typeof StartSubagentInput>;
 
 const MessageSubagentInput = z
   .object({
@@ -686,6 +723,31 @@ const ReadHandoffInput = z
   .strict();
 
 const GetSkillInput = z.object({ name: NonEmptyText.describe("Skill name from list_skills.") }).strict();
+
+const DispatchSelectedRolesInput = z
+  .object({
+    task: NonEmptyText.describe("Task objective used for deterministic routing (required)."),
+    files: NonEmptyText.optional().describe("Changed path, or comma-separated paths, to scope the plan to."),
+    base: NonEmptyText.optional().describe("Git base ref used with <base>...HEAD for committed changes."),
+    taskId: NonEmptyText.optional().describe(
+      "Stable caller-supplied task identifier. Omit to let the selector derive one.",
+    ),
+    classification: NonEmptyText.optional().describe(
+      "Authorized knowledge classification for this task, if known.",
+    ),
+    notifyParent: z
+      .boolean()
+      .optional()
+      .describe(
+        "When true, each dispatched role's final outcome is sent back to the parent session as it " +
+          "completes. Defaults to false here (unlike start_subagent, which defaults to true) -- a " +
+          "multi-role fan-out notifying the parent for every role individually is usually noise; poll " +
+          "with get_subagent per sessionId instead, or set this explicitly if per-role notifications " +
+          "are actually wanted.",
+      ),
+  })
+  .strict();
+type DispatchSelectedRolesInputShape = z.infer<typeof DispatchSelectedRolesInput>;
 
 // ---------------------------------------------------------------------------
 // Setup and tool registration
@@ -732,6 +794,88 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
     return workspaceRoot;
   }
 
+  // Shared by start_subagent and dispatch_selected_roles: resolve a named
+  // preset, spin up its ClineCore session, and register it in `subagents`
+  // for get_subagent/message_subagent to find. Throws on an unknown preset
+  // or a preset with no resolvable modelId -- callers that need to dispatch
+  // several presets and keep going past one bad name should catch per call
+  // (see dispatch_selected_roles below), not rely on this function to do
+  // that for them.
+  async function startPresetSubagent(
+    input: StartSubagentInputShape,
+    toolCtx: AgentToolContext,
+  ): Promise<{ status: "started"; sessionId: string; label: string; preset: string; task: string }> {
+    const baseCwd = requireWorkspaceRoot();
+    const defs = readAgentDefinitions(baseCwd);
+    const def = defs.find((d) => d.name === input.preset);
+    if (!def) {
+      const available = defs.map((d) => d.name).join(", ");
+      throw new Error(`Unknown agent preset: "${input.preset}". Available presets: ${available || "none"}.`);
+    }
+
+    const cwd = resolveContainedCwd(baseCwd, input.workingDirectory ?? def.cwd);
+    const providerId = input.providerId ?? def.providerId ?? "anthropic";
+    const modelId = input.modelId ?? def.modelId;
+    if (!modelId) {
+      throw new Error(`Preset "${def.name}" has no modelId and no override was supplied.`);
+    }
+    const prompt = [def.systemPrompt.trim(), input.instructions?.trim()].filter(Boolean).join("\n\n");
+
+    const { toolPolicies, mode } = resolveToolPolicyConfig(def);
+
+    const mgr = await getSessionManager();
+    const { sessionId } = await mgr.start({
+      config: {
+        providerId,
+        modelId,
+        cwd,
+        workspaceRoot: cwd,
+        enableTools: true,
+        enableSpawnAgent: false,
+        enableAgentTeams: false,
+        pluginPaths: [],
+        systemPrompt: prompt,
+        maxIterations: input.maxIterations ?? def.maxIterations,
+        toolPolicies,
+        mode,
+      },
+      interactive: false,
+    });
+
+    const subagent: RunningSubagent = {
+      sessionId,
+      parentSessionId: parentSessionId(toolCtx),
+      name: input.label,
+      task: input.task,
+      preset: def.name,
+      startedAt: Date.now(),
+      status: "running",
+    };
+    subagents.set(sessionId, subagent);
+    logger?.log("Started subagent", {
+      sessionId,
+      toolName: "start_subagent",
+      label: input.label,
+      preset: def.name,
+      providerId,
+      modelId,
+      mode,
+    });
+    pluginTelemetry?.recordCounter("cline_agents.subagents.started", 1, {
+      preset: def.name,
+      provider_id: providerId,
+    });
+    void runSubagentTurn(subagent, input.task, input.notifyParent !== false);
+
+    return {
+      status: "started",
+      sessionId,
+      label: subagent.name,
+      preset: def.name,
+      task: subagent.task,
+    };
+  }
+
   // -- start_subagent --
   api.registerTool(
     createTool({
@@ -746,81 +890,83 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
       retryable: false,
       execute: async (rawInput: unknown, toolCtx: AgentToolContext) => {
         const input = StartSubagentInput.parse(rawInput);
-        const baseCwd = requireWorkspaceRoot();
-        const defs = readAgentDefinitions(baseCwd);
-        const def = defs.find((d) => d.name === input.preset);
-        if (!def) {
-          const available = defs.map((d) => d.name).join(", ");
+        return startPresetSubagent(input, toolCtx);
+      },
+    }) as AgentTool<unknown, unknown>,
+  );
+
+  // -- dispatch_selected_roles --
+  api.registerTool(
+    createTool({
+      name: "dispatch_selected_roles",
+      description:
+        "Get a deterministic dispatch plan from this repository's Cadre catalog via `bin/cadre select` " +
+        "(same authoritative selector the `cadre` plugin's agents_select tool uses) and, if the plan is " +
+        "staffed, immediately start_subagent every selected primary and reviewer role from it. This is " +
+        "the glue agents_select's own tool description says a Cline session must otherwise do by hand: " +
+        "unlike the `cadre` plugin (which only plans -- see its own registerTool call, it cannot spawn " +
+        "anything), this plugin already embeds its own ClineCore session manager, so it can select and " +
+        "dispatch in one call. Support roles are returned in the plan but never auto-dispatched here -- " +
+        "they're advisory by the same contract agents_select documents, and are left for the caller to " +
+        "start explicitly with start_subagent if wanted. Returns the plan plus one entry per dispatch " +
+        "attempt (`started` with a sessionId, or `skipped` with a reason -- e.g. a role name the plan " +
+        "returned that has no matching preset). A `dispatch_disposition.status` other than \"staffed\" " +
+        "(\"advisory-only\" or \"no-agents-selected\") dispatches nothing -- the plan is still returned " +
+        "so the caller can see why.",
+      inputSchema: z.toJSONSchema(DispatchSelectedRolesInput),
+      timeoutMs: 60_000,
+      retryable: false,
+      execute: async (rawInput: unknown, toolCtx: AgentToolContext) => {
+        const input = DispatchSelectedRolesInput.parse(rawInput);
+        const rootPath = requireWorkspaceRoot();
+
+        let plan: DispatchPlan;
+        try {
+          plan = await runCadreSelect(input, rootPath);
+        } catch (caught) {
+          const err = caught as { message?: string; stderr?: string };
           throw new Error(
-            `Unknown agent preset: "${input.preset}". Available presets: ${available || "none"}.`,
+            [err.stderr?.trim(), err.message].filter(Boolean).join("\n") || "cadre select failed",
           );
         }
 
-        const cwd = resolveContainedCwd(baseCwd, input.workingDirectory ?? def.cwd);
-        const providerId = input.providerId ?? def.providerId ?? "anthropic";
-        const modelId = input.modelId ?? def.modelId;
-        if (!modelId) {
-          throw new Error(
-            `Preset "${def.name}" has no modelId and no override was supplied.`,
-          );
+        const status = plan.dispatch_disposition?.status;
+        if (status !== "staffed") {
+          return {
+            plan,
+            dispatched: [],
+            note:
+              `dispatch_disposition.status is "${status ?? "unknown"}"` +
+              (plan.dispatch_disposition?.reason ? `: ${plan.dispatch_disposition.reason}` : "") +
+              " -- nothing was dispatched. See the returned plan for what the selector actually found.",
+          };
         }
-        const prompt = [def.systemPrompt.trim(), input.instructions?.trim()]
-          .filter(Boolean)
-          .join("\n\n");
 
-        const { toolPolicies, mode } = resolveToolPolicyConfig(def);
+        const roleIds = [...new Set([...(plan.agents?.primary ?? []), ...(plan.agents?.reviewers ?? [])])];
+        const results = await Promise.all(
+          roleIds.map(async (roleId) => {
+            try {
+              const started = await startPresetSubagent(
+                {
+                  label: roleId,
+                  task: input.task,
+                  preset: roleId,
+                  notifyParent: input.notifyParent ?? false,
+                },
+                toolCtx,
+              );
+              return { role: roleId, ...started };
+            } catch (caught) {
+              return {
+                role: roleId,
+                status: "skipped" as const,
+                reason: caught instanceof Error ? caught.message : String(caught),
+              };
+            }
+          }),
+        );
 
-        const mgr = await getSessionManager();
-        const { sessionId } = await mgr.start({
-          config: {
-            providerId,
-            modelId,
-            cwd,
-            workspaceRoot: cwd,
-            enableTools: true,
-            enableSpawnAgent: false,
-            enableAgentTeams: false,
-            pluginPaths: [],
-            systemPrompt: prompt,
-            maxIterations: input.maxIterations ?? def.maxIterations,
-            toolPolicies,
-            mode,
-          },
-          interactive: false,
-        });
-
-        const subagent: RunningSubagent = {
-          sessionId,
-          parentSessionId: parentSessionId(toolCtx),
-          name: input.label,
-          task: input.task,
-          preset: def.name,
-          startedAt: Date.now(),
-          status: "running",
-        };
-        subagents.set(sessionId, subagent);
-        logger?.log("Started subagent", {
-          sessionId,
-          toolName: "start_subagent",
-          label: input.label,
-          preset: def.name,
-          providerId,
-          modelId,
-          mode,
-        });
-        pluginTelemetry?.recordCounter("cline_agents.subagents.started", 1, {
-          preset: def.name,
-          provider_id: providerId,
-        });
-        void runSubagentTurn(subagent, input.task, input.notifyParent !== false);
-
-        return {
-          status: "started",
-          sessionId,
-          label: subagent.name,
-          preset: def.name,
-          task: subagent.task,
-        };
+        return { plan, dispatched: results };
       },
     }) as AgentTool<unknown, unknown>,
   );

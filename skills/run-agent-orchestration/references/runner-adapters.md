@@ -237,49 +237,53 @@ see `AGENTS.md`'s project-structure note) registers exactly one tool,
 `agents_select`, which shells out to `./bin/cadre select` and returns the
 JSON dispatch plan. It is explicitly documented as "Plan only: never invokes
 agents" and must stay that way (see that repository's `cline/index.ts` tool
-description). **There is currently no
-plugin-registered tool in this repo, and no supported one to add, that
-actually dispatches a named role on Cline** — this is a confirmed gap, not an
-oversight to route around silently:
+description) — that plugin does not, and should not, gain a dispatch tool
+itself.
 
-- **Why a plugin can't dispatch.** A Cline plugin's `setup(api, ctx)` only
-  receives `AgentExtensionApi`, whose surface is `registerTool`,
-  `registerCommand`, `registerRule`, `registerMessageBuilder`,
+**Ordinary single-role dispatch and plan-to-dispatch glue: use the separate
+`cline-agents/` plugin, in the same repository.** A previous version of this
+section said no plugin-registered dispatch tool existed or could exist on
+Cline; that was true for `cline/` alone but is now superseded by
+`cline-agents/`'s existence, which sidesteps the limitation described below
+rather than removing it:
+
+- **Why `cline/`'s `agents_select` still can't dispatch, and why
+  `cline-agents/` isn't bound by the same limit.** A Cline plugin's
+  `setup(api, ctx)` only receives `AgentExtensionApi`, whose surface is
+  `registerTool`, `registerCommand`, `registerRule`, `registerMessageBuilder`,
   `registerProvider`, `registerAutomationEventType`, and `registerMcpServer`
   (verified against the installed `@cline/sdk`/`@cline/core` `0.0.65` type
   declarations under that plugin's `node_modules/@cline/core/dist/`, and
   against `docs.cline.bot/sdk/guides/writing-plugins`). None of those let a
-  plugin spawn a sub-agent or teammate in the *current* session. The actual
-  multi-agent primitives — `createSpawnAgentTool`, `AgentTeamsRuntime`,
-  `createConfiguredAgentTools`, `bootstrapAgentTeams`, and the
-  `team_spawn_teammate`/`team_run_task`/... tool family — live in
-  `@cline/core` and are session-bootstrap primitives the **host** (the `cline`
-  CLI itself, or an SDK app calling `ClineCore.create()`) uses to assemble a
-  session's tool list before it starts; `@cline/agents`' own README says so
-  directly ("For multi-agent workflows, use `@cline/core`" — plugins are not
-  in that path). This is also consistent with the plugin sandbox
-  architecture: a loaded plugin's `setup`/tool `execute` runs in an isolated
-  subprocess that talks to the host only over the same
-  `registerTool`/`executeTool` RPC calls (confirmed by reading the
-  `@cline/core` bundle), so even a plugin tool's `execute()` body has no
-  in-process handle to the running session's `AgentTeamsRuntime`.
-- **Ordinary single-role dispatch today: manual injection, same shape as
-  Codex's fallback below.** There is no Cline-native generated wrapper for
-  this repo's roles yet — `.clinerules/` here holds one general pointer file
-  to `AGENTS.md`/`roster/RUNBOOK.md`, not per-role definitions (see
-  `AGENTS.md`'s project-structure note), and this repo does not generate
-  `.cline/roster/*.yml` profiles (see "Cline's own native persona mechanism"
-  below for why not, yet). Until that changes, an orchestrating Cline session
-  must read the target role's definition itself — its plugin-generated Codex
-  wrapper (`.codex/agents/<role-id>.toml`'s `developer_instructions`, or the
-  global synced copy `~/.codex/agents/agents-<role-id>.toml`) is the most
-  convenient already-flattened source, or `roster/<phase>/<role>/AGENT.md`
-  directly for the canonical text — and inject that content as the task/system
-  framing for a fresh chat turn or a spawned sub-agent
-  (`use_subagents`/`enableSpawnAgent`, if the host session has that enabled).
-  Report in the final summary that manual injection was used, exactly as the
-  Codex section below asks, so it isn't mistaken for a mechanism that named
-  the role directly.
+  plugin reach into the **host session's own** `AgentTeamsRuntime` — the
+  `createSpawnAgentTool`/`bootstrapAgentTeams`/`team_spawn_teammate`/...
+  family are session-bootstrap primitives the host (the `cline` CLI itself,
+  or an SDK app calling `ClineCore.create()`) uses to assemble *its own*
+  session's tool list before it starts, and a plugin's `setup`/tool
+  `execute()` runs in an isolated subprocess with no in-process handle to
+  that runtime. `cline-agents/` does not attempt to reach it: it embeds its
+  own independent `ClineCore` instance inside the plugin process (see its
+  `getSessionManager()`) and drives that instead — the plugin **is** the "SDK
+  app calling `ClineCore.create()`" the primitives above are meant for, just
+  running inside a plugin's process rather than as a standalone script. This
+  is a real, working mechanism, not a workaround pending a Cline SDK change.
+- **How to dispatch a named role today.** Install `cline-agents/` (see its
+  own README for the two supported install shapes: directory-based
+  `cline plugin install`, or SDK-embedding via `pluginPaths`). Its
+  `start_subagent` tool takes a `preset` naming one of this repository's 71
+  bundled role presets (or an accepted global/project override — see
+  `list_agent_presets`) and starts it as a background subagent, returning a
+  session ID to poll with `get_subagent`. Its `dispatch_selected_roles` tool
+  closes the remaining gap this section used to describe as manual: it calls
+  `bin/cadre select` itself (the same authoritative selector `agents_select`
+  uses) and, if the plan's `dispatch_disposition.status` is `"staffed"`,
+  immediately `start_subagent`s every selected primary and reviewer role —
+  one tool call instead of reading `agents_select`'s JSON plan and manually
+  matching role IDs to `start_subagent` calls by hand. Support roles are
+  still left for the caller to start explicitly, matching this skill's own
+  "advisory-only" contract. Prefer `dispatch_selected_roles` for an ordinary
+  wave; use `start_subagent` directly when dispatching a single already-known
+  role without re-running selection.
 - **Cline's own native persona mechanism exists but is not yet usable as a
   clean fix.** Cline has an in-progress "agent profiles" feature:
   `.cline/roster/*.yml` (workspace) or `~/.cline/roster/` (global) files with
@@ -306,7 +310,8 @@ oversight to route around silently:
   state before relying on this in production; it will go stale. Do not treat
   `.cline/roster/*.yml` as a reliable per-role dispatch
   path today; this is a documented future option once that stack merges and
-  is verified live, not a current substitute for manual injection above.
+  is verified live, not a current substitute for `cline-agents/`'s
+  `start_subagent`/`dispatch_selected_roles` above.
   This repo does not generate these files (no `cline-roster/` equivalent to
   `provider/codex-agents/*.toml` exists) — adding that
   generator is out of scope for this fix and would need its own design/review

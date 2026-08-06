@@ -60,9 +60,13 @@ Install `cadre` for role selection. Only add the lifecycle plugins if you actual
 
 ### Cline
 
-Cline installs one plugin per repository clone/URL. The `agents_select` tool call belongs entirely to `cadre` (the lifecycle plugins are skill-only, no Cline tool), so there's nothing else to select here:
+Two separate Cline plugins live in this repository (the lifecycle plugins remain skill-only, no Cline tool either way):
+
+- **`cline`** (this repository's root) — the single `agents_select` planning tool: routes a task via `bin/cadre select` and returns the dispatch plan. Never invokes agents itself.
+- **`cline-agents`** (`cline-agents/` subdirectory) — actually dispatches: `start_subagent`/`message_subagent`/`get_subagent`/`list_agent_presets` (71 bundled role presets), `list_skills`/`get_skill` (this repository's own bundled skills), `dispatch_selected_roles` (calls `bin/cadre select` and immediately dispatches every selected primary/reviewer role in one call), and `save_handoff`/`read_handoff`. See [`cline-agents/README.md`](cline-agents/README.md) for its full tool table and the SDK-embedding quick start it documents as its primary usage pattern.
 
 ```sh
+# cadre: agents_select (plan-only)
 cline plugin install --git https://github.com/deagy/cadre-lifecycle --force
 ```
 
@@ -70,10 +74,11 @@ Or from a local checkout:
 
 ```sh
 git clone https://github.com/deagy/cadre-lifecycle.git
-cline plugin install /path/to/cadre-lifecycle --force
+cline plugin install /path/to/cadre-lifecycle --force              # cadre: agents_select
+cline plugin install /path/to/cadre-lifecycle/cline-agents --force # cline-agents: dispatch tools
 ```
 
-If `agents_select` doesn't show up after installing, restart the Cline hub daemon:
+If a tool doesn't show up after installing, restart the Cline hub daemon:
 
 ```sh
 cline doctor fix

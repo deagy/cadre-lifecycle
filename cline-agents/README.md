@@ -64,6 +64,7 @@ and discovers the entry point from the `cline.plugins` field.
 | Tool | Purpose |
 |---|---|
 | `start_subagent` | Start a subagent in the background and return a session ID immediately. **`preset` is required** -- see "Preset-only dispatch" below. |
+| `dispatch_selected_roles` | Call `bin/cadre select` (the same authoritative selector the `cadre` plugin's `agents_select` tool uses) and, if the plan is staffed, immediately `start_subagent` every selected primary/reviewer role in one call. Support roles are returned in the plan but never auto-dispatched -- start them explicitly if wanted. Closes the plan-to-dispatch gap `agents_select`'s own tool description points at. |
 | `message_subagent` | Send a follow-up message to a running subagent. |
 | `get_subagent` | Poll status, output, or error for a subagent session. |
 | `list_agent_presets` | List the 71 bundled Cadre role presets plus any accepted global/project overrides. |
