@@ -4,6 +4,18 @@
   "private": true,
   "type": "module",
   "main": "index.ts",
+  "cline": {
+    "plugins": [
+      {
+        "paths": [
+          "./index.ts"
+        ],
+        "capabilities": [
+          "tools"
+        ]
+      }
+    ]
+  },
   "dependencies": {
     "@cline/sdk": "0.0.65",
     "@cline/shared": "0.0.65",
