@@ -66,6 +66,7 @@ describe("cline-agents plugin manifest", () => {
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
       [
+        "dispatch_selected_roles",
         "get_skill",
         "get_subagent",
         "list_agent_presets",
@@ -443,6 +444,50 @@ describe("settled decision #4: preset-only dispatch and cwd containment", () => 
 
   it("resolveContainedCwd defaults to the workspace root when omitted", () => {
     expect(resolveContainedCwd(REPO_ROOT, undefined)).toBe(REPO_ROOT);
+  });
+});
+
+describe("dispatch_selected_roles", () => {
+  it("is registered alongside start_subagent, distinct from the plan-only cadre plugin's agents_select", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = tools.find((t) => t.name === "dispatch_selected_roles");
+    expect(tool).toBeDefined();
+    expect(tool?.description).toMatch(/bin\/cadre select/);
+    expect(tool?.description).toMatch(/start_subagent/);
+    expect(tool?.description).toMatch(/advisory/i);
+  });
+
+  it("dispatches nothing and explains why for a task with no matching route", async () => {
+    // A task/files pair specific enough to be genuinely unmatched by any
+    // routing.yaml rule, so the real `bin/cadre select` subprocess returns
+    // dispatch_disposition.status !== "staffed" without needing a live
+    // model session -- this test never reaches startPresetSubagent.
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "dispatch_selected_roles");
+    const result = (await tool.execute(
+      {
+        task: "Investigate a vague, non-actionable ask with no concrete artifact",
+        files: "does-not-exist-and-matches-no-route.unknownext",
+        taskId: "dispatch-selected-roles-test-no-match",
+        classification: "internal",
+      },
+      FAKE_TOOL_CTX,
+    )) as { plan: { dispatch_disposition?: { status?: string } }; dispatched: unknown[]; note?: string };
+
+    expect(result.plan).toBeDefined();
+    expect(result.dispatched).toEqual([]);
+    expect(result.note).toBeDefined();
+    expect(result.plan.dispatch_disposition?.status).not.toBe("staffed");
+  });
+
+  it("propagates a cadre select failure as a thrown error", async () => {
+    const tools = await registerTools(undefined);
+    const tool = findTool(tools, "dispatch_selected_roles");
+    // requireWorkspaceRoot() throws before runCadreSelect is ever reached
+    // when no workspace root was resolved from the host session.
+    await expect(
+      tool.execute({ task: "anything" }, FAKE_TOOL_CTX),
+    ).rejects.toThrow(/workspace root/);
   });
 });
 
