@@ -15,6 +15,13 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.9.2](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.2) - 2026-08-06
+
+### Fixed
+
+- **`cline plugin install https://github.com/deagy/cadre-lifecycle --force` no longer fails with `Cannot find module 'zod'`/`'vitest'`** (#23). Cline's plugin installer only runs `npm install` at the repository root; without an npm `workspaces` declaration, the root `package.json` had zero dependencies, so npm never visited the `cline`/`cline-agents`/`cline-lifecycle` subdirectories where the actual runtime deps live and no `node_modules/` was ever created. Added `workspaces` to root `package.json` and a `cline.plugins[].paths` block to `cline/package.json` (previously missing, making the `agents_select` plugin invisible to Cline's installer).
+- **Restored `npm ci` in this repository's own CI** (`.github/workflows/validate.yml`), broken by the same change: moving to npm workspaces requires a single root `package-lock.json` in place of the three per-plugin lockfiles it replaces, and CI still needed to install from that root lockfile instead of the deleted per-directory ones.
+
 ## [0.9.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.1) - 2026-08-06
 
 ### Fixed
