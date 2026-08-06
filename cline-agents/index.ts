@@ -1020,6 +1020,7 @@ export {
   formatKnowledgeInstructions,
   countFlaggedPassages,
   shouldRetrieveKnowledge,
+  sanitizeToolResult,
   HANDOFFS_DIR,
   type AgentDefinition,
   type KnowledgeContextRequest,

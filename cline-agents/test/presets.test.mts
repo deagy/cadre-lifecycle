@@ -19,6 +19,7 @@ import {
   resolvePythonInterpreter,
   resolveToolPolicyConfig,
   retrieveKnowledgeContext,
+  sanitizeToolResult,
   shouldRetrieveKnowledge,
   type SetupApi,
   type SetupContext,
@@ -652,13 +653,45 @@ describe("knowledge-store retrieval wiring", () => {
   });
 });
 
+describe("sanitizeToolResult", () => {
+  it("guards against an actually self-referential object, unlike plain JSON.stringify", () => {
+    // A genuine regression guard: construct a real cycle (an Error object
+    // with e.selfRef === e, matching the exact shape this file's own
+    // "Serialization safety" comment cites) and prove sanitizeToolResult
+    // survives it. The control assertion below confirms this test would
+    // actually have failed before sanitizeToolResult existed -- plain
+    // JSON.stringify on the same object throws "Converting circular
+    // structure to JSON", which is the failure this function exists to
+    // prevent.
+    const cyclic: { selfRef?: unknown; label: string } = { label: "cyclic" };
+    cyclic.selfRef = cyclic;
+
+    expect(() => JSON.stringify(cyclic)).toThrow(/circular/i);
+
+    let sanitized: Record<string, unknown> | undefined;
+    expect(() => {
+      sanitized = sanitizeToolResult(cyclic);
+    }).not.toThrow();
+    expect(() => JSON.stringify(sanitized)).not.toThrow();
+    expect(sanitized?.label).toBe("cyclic");
+  });
+
+  it("is a no-op for an already-JSON-safe value", () => {
+    const plain = { plan: { status: "ready" }, dispatched: [] };
+    expect(sanitizeToolResult(plain)).toEqual(plain);
+  });
+});
+
 describe("dispatch_selected_roles serialization safety", () => {
-  it("dispatch_selected_roles result is fully re-serializable (sanitizeToolResult guards against cycles)", async () => {
-    // Regression test: the dispatch_selected_roles tool's return value flows
-    // through the same Cline SDK serialization path as agents_select, and can
-    // encounter injected cyclic references (e.g., Error objects with
-    // e.error === e). The sanitizeToolResult wrapper must produce a result
-    // that can be round-tripped through JSON.stringify without throwing.
+  it("dispatch_selected_roles's real, non-cyclic result round-trips through JSON unchanged", async () => {
+    // dispatch_selected_roles's actual return value (plan from `cadre
+    // select`'s JSON.parse'd stdout, plus a dispatched array built from
+    // string/primitive fields -- see runCadreSelect/startPresetSubagent)
+    // structurally cannot contain a cycle, so this exercises the ordinary,
+    // already-JSON-safe path through sanitizeToolResult -- confirming it
+    // doesn't alter or drop data for the common case -- rather than the
+    // cyclic-reference guard itself, which the "sanitizeToolResult"
+    // describe block above tests directly against a real cycle.
     const tools = await registerTools(REPO_ROOT);
     const tool = findTool(tools, "dispatch_selected_roles");
 
@@ -675,8 +708,6 @@ describe("dispatch_selected_roles serialization safety", () => {
       FAKE_TOOL_CTX,
     )) as Record<string, unknown>;
 
-    // The sanitizeToolResult wrapper must produce a result that can be
-    // round-tripped through JSON.stringify without throwing.
     expect(() => JSON.stringify(result)).not.toThrow();
 
     // And the round-trip must preserve the data.
