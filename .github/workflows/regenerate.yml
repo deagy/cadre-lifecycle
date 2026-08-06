@@ -115,6 +115,15 @@ jobs:
       - name: Apply generated content (README.md and hand-authored plugins excluded)
         run: python3 tools/apply_regeneration.py --generated "$RUNNER_TEMP/cadre-lifecycle-regen" --target .
 
+      - name: Port cline-agents/agents/ and cline-agents/skills/ from the just-applied content
+        # Reads this checkout's own agents/ and skills/ (already updated by
+        # the previous step) and writes cline-agents/agents/,
+        # cline-agents/skills/ -- fails closed (nonzero exit) on any
+        # unrecognized source-repo-relative reference, stopping this job
+        # before a PR opens rather than shipping a leaked path. cline-agents'
+        # own index.ts/package.json/test/README.md are untouched.
+        run: python3 tools/port_cline_agents.py --root .
+
       - name: Check for drift between core and forge-specific lifecycle skills
         id: duplication_health
         run: |
@@ -211,6 +220,8 @@ jobs:
             Automated regeneration from [deagy/cadre@${{ needs.generate.outputs.cadre_ref }}](https://github.com/deagy/cadre/releases/tag/${{ needs.generate.outputs.cadre_ref }}) (`${{ needs.generate.outputs.cadre_commit }}`).
 
             Applied via `tools/apply_regeneration.py` -- README.md, plugin manifests/tools, and `plugins/lifecycle-github/`/`plugins/lifecycle-gitlab/` are excluded by design and were not touched.
+
+            `cline-agents/agents/` and `cline-agents/skills/` were also re-derived from this update via `tools/port_cline_agents.py` -- `cline-agents/index.ts`, its `package.json`, `test/`, and `README.md` are hand-authored and untouched.
 
             ${{ needs.generate.outputs.duplication_health_status != '0' && '**⚠️ tools/test_plugin_duplication_health.py failed** -- the core lifecycle skills changed in a way that may need manual reconciliation into the GitHub/GitLab plugin forks before merging. See the `generate` job log for details.' || '`tools/test_plugin_duplication_health.py` passed -- no reconciliation needed.' }}
 

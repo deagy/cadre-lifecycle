@@ -4,7 +4,7 @@ description: Diagnose and fix local Docker Compose or Podman Compose failures fo
 canonicalSource: skills/local-compose-debug/SKILL.md
 ---
 
-> Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.
+> Cline packaging note: this skill's instructions describe this repository's own `roster/`-layout tooling in the abstract (the role catalog, routing configuration, and selector this plugin bundles) -- they are not literal paths to look up in an arbitrary target project. When dispatching, use `start_subagent`/`dispatch_selected_roles`/`bin/cadre select` rather than reading these files directly.
 
 
 # Local Compose Debug

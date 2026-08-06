@@ -4,13 +4,13 @@ description: Safely ingest, test, and retrieve historical chat exports for this 
 canonicalSource: skills/knowledge-ingestion/SKILL.md
 ---
 
-> Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.
+> Cline packaging note: this skill's instructions describe this repository's own `roster/`-layout tooling in the abstract (the role catalog, routing configuration, and selector this plugin bundles) -- they are not literal paths to look up in an arbitrary target project. When dispatching, use `start_subagent`/`dispatch_selected_roles`/`bin/cadre select` rather than reading these files directly.
 
 
 # Knowledge Ingestion
 
 The knowledge store this skill operates resolves in three tiers — see
-`roster/knowledge-store/README.md`: an explicit `--config` always wins; else a
+this project's knowledge-store documentation: an explicit `--config` always wins; else a
 project-local `.agents/knowledge-store/config.json` (found by walking up from
 the current directory to the project's `.git` boundary) wins; else the store
 falls back to the one shared across every project on the machine
@@ -27,14 +27,14 @@ content separate from every other project), or the shared store across every
 project on this machine (`~/.agents/knowledge-store/config.json`)? Suggest
 project-local as the default if the human doesn't have a preference. Create
 only the one chosen — an empty `{}` is sufficient, since `load_config()` fills
-every other setting from built-in defaults (`roster/knowledge-store/src/config.py`).
+every other setting from built-in defaults (the bundled knowledge-store config-resolution logic).
 Skip asking (and skip creating anything) once a tier already resolves.
 
 ## Workflow
 
-1. Read `roster/knowledge-store/SECURITY.md`, `roster/shared/knowledge-use-policy.md`, and `roster/workflows/knowledge-ingestion.md`.
+1. Read this project's knowledge-store security documentation, this project's knowledge-use-policy documentation, and this repository's knowledge-ingestion workflow doc.
 2. Confirm the source owner, classification, retention expectation, and whether the export may contain secrets, personal data, or customer data.
-3. Run the knowledge-store tests before ingestion: `python3 -m unittest discover -s roster/knowledge-store/test -p "test_*.py"`.
+3. Run the knowledge-store tests before ingestion if working from a checkout of the source register (this bundled plugin does not ship that test suite itself).
 4. Start with a sanitized sample. Verify parser field mapping, message order, roles, timestamps, redaction, conversation IDs, and chunk citations.
 5. Initialize with `cadre knowledge init` (`bin/cadre` at the repository root resolves the interpreter for you; omit `--config` to use the project-local-then-global resolution above, or pass one explicitly). If the current project needs a real partition rather than a shared store, create `.agents/knowledge-store/config.json` at its repository root before running `init` so that tier is picked up automatically. Missing explicit configuration must fail closed.
 6. Ingest with `cadre knowledge ingest`, an explicit `--source` that identifies the current project (e.g. its repository name), and an explicit `--classification`. Do not broaden classification or source scope for convenience — when using the shared global store, `--source` is the only thing keeping this project's content distinguishable from every other project's.
