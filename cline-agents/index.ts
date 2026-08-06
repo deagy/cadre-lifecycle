@@ -56,6 +56,7 @@ import { z } from "zod";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const BUNDLED_AGENTS_DIR = join(MODULE_DIR, "agents");
+const BUNDLED_SKILLS_DIR = join(MODULE_DIR, "skills");
 
 function resolveDefaultHomeDir(): string {
   const envHome = process?.env?.HOME?.trim();
@@ -317,15 +318,42 @@ function readAgentDefinitions(baseCwd: string): AgentDefinition[] {
   return [...defs.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Load all available skills: bundled (this plugin's static port of this
+ * repository's own `skills/*&#47;SKILL.md`) plus global and project overlays,
+ * in that discovery order. Mirrors readAgentDefinitions' reserved-name
+ * protection: a bundled skill name cannot be silently shadowed by a
+ * global- or project-tier skill of the same name.
+ */
 function readSkillDefinitions(baseCwd: string): SkillDefinition[] {
+  const bundled = readMarkdownDir(BUNDLED_SKILLS_DIR, "bundled").map(
+    (entry): SkillDefinition => ({
+      name: entry.name,
+      description: optStr(entry.data.description),
+      content: entry.body,
+      source: entry.source,
+    }),
+  );
+  const reservedNames = new Set(bundled.map((d) => d.name));
+
+  const defs = new Map<string, SkillDefinition>();
+  for (const d of bundled) defs.set(d.name, d);
+
   const GLOBAL_SKILLS_DIR = join(resolveClineDataDirPath(), "settings", "skills");
-  const dirs: Array<{ path: string; source: SkillDefinition["source"] }> = [
+  const overlayDirs: Array<{ path: string; source: SkillDefinition["source"] }> = [
     { path: GLOBAL_SKILLS_DIR, source: "global" },
     { path: join(baseCwd, ".cline", "skills"), source: "project" },
   ];
-  const defs = new Map<string, SkillDefinition>();
-  for (const { path, source } of dirs) {
+  for (const { path, source } of overlayDirs) {
     for (const entry of readMarkdownDir(path, source)) {
+      if (reservedNames.has(entry.name)) {
+        console.error(
+          `[cline-agents] Ignoring ${source}-tier skill "${entry.name}": this name is reserved by ` +
+            `a bundled skill and cannot be overridden. Rename the ${source}-tier file's "name" ` +
+            `frontmatter to register it under a distinct identity.`,
+        );
+        continue;
+      }
       defs.set(entry.name, {
         name: entry.name,
         description: optStr(entry.data.description),
@@ -944,8 +972,9 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
     createTool({
       name: "list_skills",
       description:
-        "List the available skill definitions from global and project-level directories (this plugin " +
-        "ships no bundled skills of its own).",
+        "List the available skill definitions: this repository's own bundled skills, plus any " +
+        "global- or project-level overlays (a project-level skill of the same name as a bundled " +
+        "one is rejected, not silently overridden).",
       inputSchema: z.toJSONSchema(z.object({}).strict()),
       execute: async (_input: unknown, _toolCtx: AgentToolContext) => {
         const baseCwd = requireWorkspaceRoot();
