@@ -652,6 +652,39 @@ describe("knowledge-store retrieval wiring", () => {
   });
 });
 
+describe("dispatch_selected_roles serialization safety", () => {
+  it("dispatch_selected_roles result is fully re-serializable (sanitizeToolResult guards against cycles)", async () => {
+    // Regression test: the dispatch_selected_roles tool's return value flows
+    // through the same Cline SDK serialization path as agents_select, and can
+    // encounter injected cyclic references (e.g., Error objects with
+    // e.error === e). The sanitizeToolResult wrapper must produce a result
+    // that can be round-tripped through JSON.stringify without throwing.
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "dispatch_selected_roles");
+
+    // Use a task that won't match any route, producing an advisory-only plan
+    // with empty dispatched array -- sufficient to exercise the serialization
+    // path without requiring actual subagent spawning.
+    const result = (await tool.execute(
+      {
+        task: "Review README changes",
+        files: "README.md",
+        taskId: "serialization-safety-test",
+        classification: "internal",
+      },
+      FAKE_TOOL_CTX,
+    )) as Record<string, unknown>;
+
+    // The sanitizeToolResult wrapper must produce a result that can be
+    // round-tripped through JSON.stringify without throwing.
+    expect(() => JSON.stringify(result)).not.toThrow();
+
+    // And the round-trip must preserve the data.
+    const reparsed = JSON.parse(JSON.stringify(result));
+    expect(reparsed).toEqual(result);
+  });
+});
+
 describe("handoff-store path-traversal guard", () => {
   const conversationId = "handoff-guard-test-conv";
   const HANDOFF_CTX = { conversationId } as AgentToolContext;
