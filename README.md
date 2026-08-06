@@ -29,6 +29,7 @@ flowchart TB
 .                               # cadre plugin's own root
 ├── cline/                     # Cline plugin (agents_select tool call)
 ├── cline-agents/              # Cline plugin (71 Cadre role presets, dispatchable subagents)
+├── cline-lifecycle/           # Cline plugin (sdlc_init/validate/status/decide tools)
 ├── bin/cadre                  # CLI dispatcher for role selection (and lifecycle, if installed)
 ├── agent-catalog.json         # Agent role catalog (generated)
 ├── provider.json              # Agentic SDLC provider bundle (referenced by plugins/lifecycle/)
@@ -60,10 +61,11 @@ Install `cadre` for role selection. Only add the lifecycle plugins if you actual
 
 ### Cline
 
-Two separate Cline plugins live in this repository (the lifecycle plugins remain skill-only, no Cline tool either way):
+Three separate Cline plugins live in this repository:
 
 - **`cline`** (this repository's root) — the single `agents_select` planning tool: routes a task via `bin/cadre select` and returns the dispatch plan. Never invokes agents itself.
-- **`cline-agents`** (`cline-agents/` subdirectory) — actually dispatches: `start_subagent`/`message_subagent`/`get_subagent`/`list_agent_presets` (71 bundled role presets), `list_skills`/`get_skill` (this repository's own bundled skills), `dispatch_selected_roles` (calls `bin/cadre select` and immediately dispatches every selected primary/reviewer role in one call), and `save_handoff`/`read_handoff`. See [`cline-agents/README.md`](cline-agents/README.md) for its full tool table and the SDK-embedding quick start it documents as its primary usage pattern.
+- **`cline-agents`** (`cline-agents/` subdirectory) — actually dispatches: `start_subagent`/`message_subagent`/`get_subagent`/`list_agent_presets` (71 bundled role presets), `list_skills`/`get_skill` (this repository's own bundled skills), `dispatch_selected_roles` (calls `bin/cadre select` and immediately dispatches every selected primary/reviewer role in one call, optionally retrieving knowledge-store context first), and `save_handoff`/`read_handoff`. See [`cline-agents/README.md`](cline-agents/README.md) for its full tool table and the SDK-embedding quick start it documents as its primary usage pattern.
+- **`cline-lifecycle`** (`cline-lifecycle/` subdirectory) — G1–G10 Agentic SDLC governance as 4 tool calls: `sdlc_init`/`sdlc_validate`/`sdlc_status`/`sdlc_decide`, wrapping `bin/cadre sdlc` the same way the lifecycle plugins' skills already do for Claude Code/Codex. Requires the external `agentic-sdlc` kernel to be installed separately — see [`cline-lifecycle/README.md`](cline-lifecycle/README.md).
 
 ```sh
 # cadre: agents_select (plan-only)
@@ -74,8 +76,9 @@ Or from a local checkout:
 
 ```sh
 git clone https://github.com/deagy/cadre-lifecycle.git
-cline plugin install /path/to/cadre-lifecycle --force              # cadre: agents_select
-cline plugin install /path/to/cadre-lifecycle/cline-agents --force # cline-agents: dispatch tools
+cline plugin install /path/to/cadre-lifecycle --force                  # cadre: agents_select
+cline plugin install /path/to/cadre-lifecycle/cline-agents --force     # cline-agents: dispatch tools
+cline plugin install /path/to/cadre-lifecycle/cline-lifecycle --force  # cline-lifecycle: sdlc tools
 ```
 
 If a tool doesn't show up after installing, restart the Cline hub daemon:
