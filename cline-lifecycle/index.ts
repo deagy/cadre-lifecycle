@@ -61,19 +61,20 @@ const CADRE_BIN = path.resolve(PLUGIN_DIR, "..", "bin", "cadre");
 // (`create-gate-issues`, `list-gate-issues`, `create-github-gate-issues`,
 // `list-github-gate-issues`, `publish-gate-status`, `list-gate-status`,
 // `request-gate-reviewers-gitlab`, `request-gate-reviewers`,
-// `publish-reviewer-nudge`, `list-reviewer-nudge`) that the packaged
-// `plugins/lifecycle-{gitlab,github}/skills/*/SKILL.md` files already
-// document, but that do not exist in every `agentic-sdlc` release within
-// this repository's declared `kernel_compatibility` range (see
-// `provider.json`) -- verified missing (`invalid choice`) against the
-// kernel pinned in this plugin's own development environment at the time
-// these tools were added. This is not a Cline-specific gap: Claude Code and
-// Codex hit the identical "invalid choice" error running the exact same
-// commands their own skills document, against the same kernel. These tools
-// are still added here, structurally complete and ready to work the moment
-// a kernel version that actually ships these subcommands is installed --
-// verify with `agentic-sdlc <subcommand> --help` before relying on any one
-// of them in a given environment.
+// `publish-reviewer-nudge`, `list-reviewer-nudge`) that were, when these
+// tools were first added, missing ("invalid choice") from the `agentic-sdlc`
+// version this plugin's development environment had installed, despite
+// being documented by the packaged `plugins/lifecycle-{gitlab,github}/
+// skills/*/SKILL.md` files and within this repository's declared
+// `kernel_compatibility` range -- traced upstream to `agentic-sdlc`'s own
+// VERSION constant not having been bumped across 9 tagged releases that
+// actually shipped these subcommands (fixed in `deagy/agentic-sdlc` v0.13.0;
+// see that repo's `agentic_sdlc/__init__.py` VERSION comment). This
+// repository's own `provider.json` now pins `kernel_compatibility.minimum`
+// to that fixed release, and every one of these 10 subcommands has been
+// live-verified against it. This was never a Cline-specific gap: Claude
+// Code and Codex hit the identical "invalid choice" error running the exact
+// same commands their own skills document, against the same stale kernel.
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -230,6 +231,11 @@ const SdlcCreateGateIssuesGitlabInput = z
     taskId: z.string().min(1).describe("Task ID to create/reuse GitLab tracking issues for (required)."),
     projectPath: z.string().min(1).describe("GitLab project path, namespace/project (required)."),
     asBot: z.string().min(1).describe("Bot/service-account GitLab username the kernel verifies as (required)."),
+    allowClassification: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Must exactly match the task's recorded classification, if set -- no default."),
     gates: GatesFilterInput,
     apply: z
       .boolean()
@@ -252,7 +258,8 @@ const SdlcCreateGithubGateIssuesInput = z
     allowClassification: z
       .string()
       .min(1)
-      .describe("Must exactly match the task's recorded classification (required)."),
+      .optional()
+      .describe("Must exactly match the task's recorded classification, if set -- no default."),
     gates: GatesFilterInput,
     allowPublicRepo: z
       .boolean()
@@ -282,7 +289,8 @@ const SdlcPublishGateStatusInput = z.discriminatedUnion("forge", [
       allowClassification: z
         .string()
         .min(1)
-        .describe("Must exactly match the task's recorded classification (required)."),
+        .optional()
+        .describe("Must exactly match the task's recorded classification, if set -- no default."),
       apply: z
         .boolean()
         .optional()
@@ -300,7 +308,8 @@ const SdlcPublishGateStatusInput = z.discriminatedUnion("forge", [
       allowClassification: z
         .string()
         .min(1)
-        .describe("Must exactly match the task's recorded classification (required)."),
+        .optional()
+        .describe("Must exactly match the task's recorded classification, if set -- no default."),
       apply: z
         .boolean()
         .optional()
@@ -320,12 +329,12 @@ const SdlcRequestGateReviewersGitlabInput = z
     asBot: z
       .string()
       .min(1)
-      .optional()
-      .describe("Bot/service-account GitLab username to verify as, if applicable."),
+      .describe("Required GitLab bot/machine username; verified via `glab api user` (required)."),
     allowClassification: z
       .string()
       .min(1)
-      .describe("Must exactly match the task's recorded classification (required)."),
+      .optional()
+      .describe("Must exactly match the task's recorded classification, if set -- no default."),
     gates: GatesFilterInput,
   })
   .strict();
@@ -339,12 +348,12 @@ const SdlcRequestGateReviewersGithubInput = z
     asBot: z
       .string()
       .min(1)
-      .optional()
-      .describe("Bot/service-account GitHub login to verify as, if applicable."),
+      .describe("Required GitHub bot/machine login; verified via `gh api user` (required)."),
     allowClassification: z
       .string()
       .min(1)
-      .describe("Must exactly match the task's recorded classification (required)."),
+      .optional()
+      .describe("Must exactly match the task's recorded classification, if set -- no default."),
     gates: GatesFilterInput,
   })
   .strict();
@@ -366,7 +375,8 @@ const SdlcPublishReviewerNudgeInput = z
     allowClassification: z
       .string()
       .min(1)
-      .describe("Must exactly match the task's recorded classification (required)."),
+      .optional()
+      .describe("Must exactly match the task's recorded classification, if set -- no default."),
     gates: GatesFilterInput,
     apply: z
       .boolean()
@@ -601,6 +611,7 @@ function buildCreateGateIssuesGitlabArgs(input: SdlcCreateGateIssuesGitlabInputS
     "--as-bot",
     input.asBot,
   ];
+  if (input.allowClassification) args.push("--allow-classification", input.allowClassification);
   if (input.gates?.length) args.push("--gates", input.gates.join(","));
   if (input.apply) args.push("--apply");
   if (input.planDigest) args.push("--plan-digest", input.planDigest);
@@ -623,9 +634,8 @@ function buildCreateGithubGateIssuesArgs(input: SdlcCreateGithubGateIssuesInputS
     input.repo,
     "--as-bot",
     input.asBot,
-    "--allow-classification",
-    input.allowClassification,
   ];
+  if (input.allowClassification) args.push("--allow-classification", input.allowClassification);
   if (input.gates?.length) args.push("--gates", input.gates.join(","));
   if (input.allowPublicRepo) args.push("--allow-public-repo");
   if (input.apply) args.push("--apply");
@@ -644,7 +654,8 @@ function buildPublishGateStatusArgs(input: SdlcPublishGateStatusInputShape, root
   } else {
     args.push("--forge", "github", "--repo", input.repo, "--pr", String(input.pr));
   }
-  args.push("--as-bot", input.asBot, "--allow-classification", input.allowClassification);
+  args.push("--as-bot", input.asBot);
+  if (input.allowClassification) args.push("--allow-classification", input.allowClassification);
   if (input.apply) args.push("--apply");
   return args;
 }
@@ -664,10 +675,10 @@ function buildRequestGateReviewersGitlabArgs(
     input.projectPath,
     "--mr-iid",
     String(input.mrIid),
-    "--allow-classification",
-    input.allowClassification,
+    "--as-bot",
+    input.asBot,
   ];
-  if (input.asBot) args.push("--as-bot", input.asBot);
+  if (input.allowClassification) args.push("--allow-classification", input.allowClassification);
   if (input.gates?.length) args.push("--gates", input.gates.join(","));
   return args;
 }
@@ -687,10 +698,10 @@ function buildRequestGateReviewersGithubArgs(
     input.repo,
     "--pr",
     String(input.pr),
-    "--allow-classification",
-    input.allowClassification,
+    "--as-bot",
+    input.asBot,
   ];
-  if (input.asBot) args.push("--as-bot", input.asBot);
+  if (input.allowClassification) args.push("--allow-classification", input.allowClassification);
   if (input.gates?.length) args.push("--gates", input.gates.join(","));
   return args;
 }
@@ -713,9 +724,8 @@ function buildPublishReviewerNudgeArgs(input: SdlcPublishReviewerNudgeInputShape
     String(input.pr),
     "--as-bot",
     input.asBot,
-    "--allow-classification",
-    input.allowClassification,
   ];
+  if (input.allowClassification) args.push("--allow-classification", input.allowClassification);
   if (input.gates?.length) args.push("--gates", input.gates.join(","));
   if (input.apply) args.push("--apply");
   return args;

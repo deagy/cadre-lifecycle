@@ -44,22 +44,23 @@ here, one tool per subcommand:
 NOT mirrored: both just wrap `bin/cadre sdlc status`, i.e. exactly what
 `sdlc_status` above already calls — there is nothing new to wrap.
 
-**Kernel-version caveat, checked at the time these 16 tools were added:**
-`create-gate-issues`, `list-gate-issues`, `create-github-gate-issues`,
-`list-github-gate-issues`, `publish-gate-status`, `list-gate-status`,
-`request-gate-reviewers-gitlab`, `request-gate-reviewers`,
+**Kernel-version history:** `create-gate-issues`, `list-gate-issues`,
+`create-github-gate-issues`, `list-github-gate-issues`, `publish-gate-status`,
+`list-gate-status`, `request-gate-reviewers-gitlab`, `request-gate-reviewers`,
 `publish-reviewer-nudge`, and `list-reviewer-nudge` (10 of the 16 — every
-GitLab/GitHub tool except the 6 approve/link ones) are documented by the
-packaged skills but were **not present** in the `agentic-sdlc` version
-actually installed in this plugin's own development environment, despite
-being within this repository's declared `kernel_compatibility` range (see
-`provider.json`) — confirmed via `agentic-sdlc <subcommand> --help` returning
-`invalid choice`. This is not Cline-specific: Claude Code and Codex hit the
-identical error running the exact same commands their own skills document,
-against the same kernel. These 10 tools are still included here, structurally
-complete and ready to work the moment a kernel version that actually ships
-them is installed — verify with `agentic-sdlc <subcommand> --help` in your
-own environment before relying on any one of them.
+GitLab/GitHub tool except the 6 approve/link ones) were documented by the
+packaged skills but **missing** ("invalid choice") from the `agentic-sdlc`
+version installed when these 10 tools were first added here, despite being
+within this repository's then-declared `kernel_compatibility` range. Traced
+upstream: `agentic-sdlc`'s own `VERSION` constant hadn't been bumped across 9
+tagged releases that actually shipped these subcommands — fixed in
+`deagy/agentic-sdlc` v0.13.0 (see that repo's `agentic_sdlc/__init__.py`).
+This repository's `provider.json` now pins `kernel_compatibility.minimum` to
+that fixed release (`[0.13.0, 1.0.0)`), and all 10 tools have been
+live-verified against it. This was never Cline-specific — Claude Code and
+Codex hit the identical error running the same commands their own skills
+document, against the same stale kernel. If you're on an older pinned
+kernel, `agentic-sdlc <subcommand> --help` will tell you.
 
 ## Requires the external `agentic-sdlc` kernel
 

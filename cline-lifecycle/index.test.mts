@@ -280,13 +280,13 @@ describe("cadre-lifecycle plugin", () => {
     ).rejects.toThrow(/root/i);
     await expect(
       findTool(tools, "sdlc_request_gate_reviewers_gitlab").execute(
-        { taskId: "x", projectPath: "group/project", mrIid: 1, allowClassification: "internal" },
+        { taskId: "x", projectPath: "group/project", mrIid: 1, asBot: "bot", allowClassification: "internal" },
         {} as never,
       ),
     ).rejects.toThrow(/root/i);
     await expect(
       findTool(tools, "sdlc_request_gate_reviewers_github").execute(
-        { taskId: "x", repo: "owner/repo", pr: 1, allowClassification: "internal" },
+        { taskId: "x", repo: "owner/repo", pr: 1, asBot: "bot", allowClassification: "internal" },
         {} as never,
       ),
     ).rejects.toThrow(/root/i);
@@ -543,6 +543,7 @@ describe("cadre-lifecycle plugin", () => {
             taskId: "cline-lifecycle-test-nonexistent-task",
             projectPath: "cline-lifecycle-test/project",
             mrIid: 1,
+            asBot: "cline-lifecycle-test-bot",
             allowClassification: "internal",
           },
           {} as never,
@@ -557,6 +558,7 @@ describe("cadre-lifecycle plugin", () => {
             taskId: "cline-lifecycle-test-nonexistent-task",
             repo: "cline-lifecycle-test/repo",
             pr: 1,
+            asBot: "cline-lifecycle-test-bot",
             allowClassification: "internal",
           },
           {} as never,
