@@ -4,7 +4,7 @@ description: Review GitLab CI/CD changes for secure pipeline design, runner trus
 canonicalSource: skills/gitlab-pipeline-review/SKILL.md
 ---
 
-> Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.
+> Cline packaging note: this skill's instructions describe this repository's own `roster/`-layout tooling in the abstract (the role catalog, routing configuration, and selector this plugin bundles) -- they are not literal paths to look up in an arbitrary target project. When dispatching, use `start_subagent`/`dispatch_selected_roles`/`bin/cadre select` rather than reading these files directly.
 
 
 # GitLab Pipeline Review
@@ -13,7 +13,7 @@ Use this skill for review or bounded repository edits to GitLab CI/CD artifacts.
 
 ## Review steps
 
-1. Read `.gitlab-ci.yml`, included CI templates, `roster/shared/technology-standards.md`, and relevant workflow docs.
+1. Read `.gitlab-ci.yml`, included CI templates, this project's technology-standards documentation, and relevant workflow docs.
 2. Identify all stages, jobs, images, services, variables, caches, artifacts, rules, dependencies, and protected-environment assumptions.
 3. Verify untrusted merge requests and forks cannot read secrets, mint credentials, modify deployment targets, poison caches, or package unreviewed artifacts.
 4. Check images/tools are pinned, runners are appropriate for trust level, artifacts have checksums/SBOMs when required, and failures are fail-closed.

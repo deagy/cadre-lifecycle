@@ -4,7 +4,7 @@ description: Conversationally help a new or occasional user figure out which of 
 canonicalSource: skills/role-discovery/SKILL.md
 ---
 
-> Packaged suite note: when the current project has no local `roster/` tree, resolve suite files under `../../suite/roster/` relative to this `SKILL.md`. The packaged plugin is self-contained; do not look for the source checkout.
+> Cline packaging note: this skill's instructions describe this repository's own `roster/`-layout tooling in the abstract (the role catalog, routing configuration, and selector this plugin bundles) -- they are not literal paths to look up in an arbitrary target project. When dispatching, use `start_subagent`/`dispatch_selected_roles`/`bin/cadre select` rather than reading these files directly.
 
 
 # Role Discovery
@@ -18,8 +18,8 @@ next."
 
 This skill is a conversational **front end**, not a second selector. The
 only authoritative, deterministic answer is `cadre select` itself
-(`roster/orchestration/src/select_agents.py`, driven by
-`roster/orchestration/routing.yaml`). Never present a role you name in
+(the bundled selector implementation, driven by
+this repository's bundled routing configuration). Never present a role you name in
 conversation as final — always frame it as "this looks like the
 `<route-id>` route, primary role `<role>`; run `cadre select` to confirm and
 get the full plan (reviewers, support, gates)." If your read of the catalog
@@ -28,9 +28,9 @@ every time.
 
 ## Step 1 — Read the ground truth first
 
-Before saying anything about roles, read the current `roster/catalog.yaml`
+Before saying anything about roles, read the current bundled role catalog
 (role inventory: `phase`, `capability`, `definition` path) and
-`roster/orchestration/routing.yaml` (the `routes` list: `id`, `paths`,
+this repository's bundled routing configuration (the `routes` list: `id`, `paths`,
 `keywords`, `primary`/`reviewers`/`support`, `quality_gates`). Do this every
 time — do not rely on role names or routes from your own memory or from an
 earlier conversation, since both files are the single source of truth and
@@ -72,10 +72,10 @@ Once you have enough detail, look for a matching entry in
 `paths` glob, or does the described work match a route's `keywords`? State
 the match plainly, for example:
 
-> This sounds like the `backend` route (`roster/orchestration/routing.yaml`)
+> This sounds like the `backend` route (this repository's bundled routing configuration)
 > — it matches on `**/*.go` and keywords like "api", "service
 > implementation", "migration". Primary role: `backend-engineer`
-> (`roster/engineering/backend-engineer/AGENT.md`, phase `build`).
+> (its own role-definition file, phase `build`).
 > Reviewers: `test-engineer`, `code-reviewer`.
 
 If the description spans more than one route (e.g. a change that touches
@@ -107,7 +107,7 @@ against the live files before repeating them, since routing evolves):
   primary `technical-writer`.
 
 Don't invent a role, phase, or capability that isn't actually present in
-`roster/catalog.yaml` — if you are not sure a name is real, re-read the
+this repository's bundled role catalog — if you are not sure a name is real, re-read the
 file rather than guessing from a plausible-sounding pattern.
 
 ## Step 4 — Hand them a real command, not just a name
@@ -142,12 +142,12 @@ running.
 This skill stops at "here's the role(s) and the command to confirm it."
 Once the user has run `cadre select` (or is ready to actually dispatch the
 identified role), hand off to
-[`run-agent-orchestration`](../run-agent-orchestration/SKILL.md) for
+the `run-agent-orchestration` skill for
 selection execution, knowledge retrieval, staged dispatch, and result
 consolidation — do not duplicate that skill's dispatch-wave or
 result-consolidation instructions here. If the user just wants to read a
 role's own authority/inputs/outputs before deciding, point them at that
-role's `AGENT.md` under `roster/<phase>/<role>/AGENT.md` directly (and
+role's `AGENT.md` under its own role-definition file directly (and
 `docs/role-index.md` if present, as a browsable overview across all of
 them).
 
@@ -159,6 +159,6 @@ them).
   actually run; describe your read of the catalog as a well-grounded guess
   that the real command will confirm or correct.
 - If the user seems to want the full reference instead of a conversation
-  (e.g. "just show me every role"), point them at `roster/catalog.yaml` and
+  (e.g. "just show me every role"), point them at this repository's bundled role catalog and
   `docs/role-index.md` directly rather than pasting the whole list into
   chat.

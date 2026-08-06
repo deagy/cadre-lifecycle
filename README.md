@@ -230,6 +230,8 @@ Everything else the register generates (`skills/`, `agents/`, `codex-agents/`, `
 
 **Automated**: [`.github/workflows/regenerate.yml`](.github/workflows/regenerate.yml) runs this same procedure and opens a PR whenever `deagy/cadre` cuts a new tag (via `repository_dispatch` from that repository's `notify-lifecycle.yml`), or on demand via `workflow_dispatch`. It never merges anything — a human always reviews the PR, same as any other change here. Use the manual procedure below to run it locally (e.g. to preview a diff before the automation would, or if the workflow's `apply_regeneration.py` needs adjusting for a new generated path — see that script's docstring for what it currently knows how to apply).
 
+The same workflow also regenerates `cline-agents/agents/` and `cline-agents/skills/` from the just-applied `agents/`/`skills/` content, via [`tools/port_cline_agents.py`](tools/port_cline_agents.py) — see [`cline-agents/README.md`](cline-agents/README.md#agents-and-skills-are-regenerated-content-not-hand-authored) for what that port does and its own fail-loud safety net. `cline-agents/index.ts`, its `package.json`, `test/`, and its own `README.md` remain hand-authored.
+
 To refresh generated assets from the Cadre register manually:
 
 ```sh

@@ -2,11 +2,10 @@
 
 A distinct plugin from [`cline/`](../cline) (which only exposes the
 `agents_select` *planning* tool and never spawns anything). This plugin,
-`cline-agents`, is a static, **one-time, hand-authored port** of this
-repository's 71 Cadre catalog roles (`agents/*.md`, the Claude Code / Codex
-subagent presets defined in this repository) into Cline SDK **agent
-presets** that a Cline session can actually dispatch as background
-subagents.
+`cline-agents`, ports this repository's 71 Cadre catalog roles (`agents/*.md`,
+the Claude Code / Codex subagent presets defined in this repository) into
+Cline SDK **agent presets** that a Cline session can actually dispatch as
+background subagents.
 
 Structurally, this plugin adapts the Cline SDK's own
 [`examples/plugins/agents-squad`](https://github.com/cline/cline) reference
@@ -15,25 +14,33 @@ plugin (preset discovery from Markdown+YAML-frontmatter files, `start_subagent`
 `get_skill` / `save_handoff` / `read_handoff`), hardened per this port's own
 threat-modeling pass -- see "Hardening vs. the upstream template" below.
 
-## Important: this is a static port, not a live sync
+## `agents/` and `skills/` are regenerated content, not hand-authored
 
-The 71 files under `agents/` were generated **once**, by hand-converting the
-71 role files under this repository's own [`agents/`](../agents) directory
-(the Cadre catalog roles). This plugin does **not** automatically regenerate
-those files when the Cadre register or `agents/*.md` changes.
+The 71 files under `agents/` and the 7 files under `skills/` are produced by
+[`tools/port_cline_agents.py`](../tools/port_cline_agents.py) (run from the
+repository root), which this repository's release-triggered regeneration
+workflow (`regenerate.yml`) now runs automatically alongside the rest of the
+Claude Code / Codex regeneration -- see root `README.md`'s "Regenerating
+Assets". It reads this repository's own `agents/*.md`/`skills/*/SKILL.md`
+and rewrites source-repo-relative path references (e.g.
+`` `../../shared/team-profile.yaml` ``) into consumer-neutral prose via a
+fixed lookup table, plus one-off handling for 4 roles that needed a closer
+look than the generic table: `debugging-engineer` and
+`knowledge-store-steward` via the script's own `ROLE_OVERRIDES`;
+`application-engineer` via its own dedicated code path plus
+`APPLICATION_ENGINEER_PORT_NOTE` (its role text is literally about this
+suite's own tooling, so most of the table doesn't apply to it at all); and
+`threat-modeler`, whose one non-generic rewrite lives directly in the
+shared `PATH_SUBSTITUTIONS` table since the source string it matches is
+unique to that one file. It fails loudly (nonzero exit, stopping
+the regeneration job before any PR opens) on any reference it doesn't
+recognize, rather than silently shipping a leaked path -- extend the script's
+substitution table when that happens, not this README.
 
-**Drift risk:** if a role's frontmatter, tools, model tier, or authority text
-changes upstream in `agents/*.md` (or in the independent `deagy/cadre`
-register those files are themselves generated from), the corresponding file
-under `cline-agents/agents/` will silently go stale until someone re-runs the
-(currently unautomated) conversion by hand. Treat this directory as a
-point-in-time snapshot, not a live view of the Cadre catalog.
-
-The same is true of `cline-agents/skills/` (a similarly static, hand-authored
-port of this repository's root [`skills/`](../skills) directory, one file per
-skill with any `references/*.md` content inlined) -- it goes stale the same
-way, for the same reason, and needs the same kind of manual re-port when the
-source skill changes.
+`cline-agents/index.ts`, its `package.json`, `test/`, and this README remain
+hand-authored; only `agents/*.md` and `skills/*.md` are generated. To
+regenerate locally: `python3 tools/port_cline_agents.py --root .` from the
+repository root.
 
 ## Quick start
 
@@ -142,7 +149,7 @@ minus the ability to shadow a reserved bundled agent name:
 | Kind | Bundled | Global | Project |
 |---|---|---|---|
 | Agents | `agents/` next to `index.ts` (71 Cadre roles, reserved names) | `~/.cline/data/settings/agents/` | `<workspaceRoot>/.cline/agents/` |
-| Skills | none shipped | `~/.cline/data/settings/skills/` | `<workspaceRoot>/.cline/skills/` |
+| Skills | `skills/` next to `index.ts` (7 skills, reserved names) | `~/.cline/data/settings/skills/` | `<workspaceRoot>/.cline/skills/` |
 
 ## Field mapping (source `agents/*.md` -> `cline-agents/agents/*.md`)
 
@@ -160,14 +167,18 @@ minus the ability to shadow a reserved bundled agent name:
 
 ## Path-reference rewrites
 
-Each source role body ends with an identical appended shared-policy block containing source-repo-relative path references (e.g. `` `../../shared/team-profile.yaml` ``, `roster/shared/README.md`) that resolve inside the *source* Cadre register/catalog layout but would 404 in an arbitrary consumer project. These were mechanically rewritten into abstract descriptions of the referenced artifact across all 71 files.
+Each source role body ends with an identical appended shared-policy block containing source-repo-relative path references (e.g. `` `../../shared/team-profile.yaml` ``, `roster/shared/README.md`) that resolve inside the *source* Cadre register/catalog layout but would 404 in an arbitrary consumer project. `tools/port_cline_agents.py`'s `PATH_SUBSTITUTIONS` table is the authoritative, current list of every such rewrite -- read that, not this paragraph, for the exact current mapping; duplicating it here would just go stale.
 
-Two roles needed a closer look rather than a mechanical rewrite -- re-check these if the corresponding source `agents/*.md` file changes:
+Four roles need a closer look rather than a purely mechanical rewrite (two via `ROLE_OVERRIDES`, one via a dedicated code path, one via a table entry whose source string is unique to that file -- see `tools/port_cline_agents.py` for exactly which), and the regeneration's own regression test (`tools/test_port_cline_agents.py`) fails if any of them silently reverts to the old committed behavior:
 
-- **`application-engineer`** -- this role's entire purpose is maintaining *this cadre-lifecycle source repository's own tooling* (`roster/catalog.yaml`, `roster/orchestration/routing.yaml`, the `cadre generate-plugin` regeneration flow). Those references are the literal subject of the role, so they were left unrewritten with an appended port note: this preset is only meaningful against a checkout of the cadre-lifecycle/cadre register repositories, not an arbitrary consumer project.
-- **`debugging-engineer`** -- one bullet named a cadre-suite-internal filename (`` `AGENT.md` ``) for an occasional meta-task within an otherwise general-purpose debugging role. That bullet was reworded to describe "an agent definition's authority, catalog/registry registration, ..." generically instead.
+- **`application-engineer`** -- this role's entire purpose is maintaining *this cadre-lifecycle source repository's own tooling* (`roster/catalog.yaml`, `roster/orchestration/routing.yaml`, the `cadre generate-plugin` regeneration flow). Those references, outside the shared-policy block, are the literal subject of the role, so they are left unrewritten with an appended port note: this preset is only meaningful against a checkout of the cadre-lifecycle/cadre register repositories, not an arbitrary consumer project. (Exempt from the script's fail-loud leak check for this reason.)
+- **`debugging-engineer`** -- one bullet named a cadre-suite-internal filename (`` `AGENT.md` ``) for an occasional meta-task within an otherwise general-purpose debugging role. Reworded to describe "an agent definition's authority, catalog/registry registration, ..." generically instead.
+- **`threat-modeler`** -- one line's `roster/shared/output-schemas/finding.schema.json` reference is rewritten to "this project's finding output schema" rather than the generic "...documentation" phrasing the rest of the table uses.
+- **`knowledge-store-steward`** -- one `` `SECURITY.md` `` parenthetical gets an added explanatory clause ("see this project's security documentation for the exact default-resolution behavior") rather than the bare generic substitution used everywhere else that filename appears.
 
-No other source-repo-relative path leakage remains in the 71 converted bodies (verified by grepping for `roster/`-prefixed and `../../`-relative paths, and bare `AGENTS.md`/`` `AGENT.md` `` references, outside frontmatter and the two call-outs above).
+`skills/*.md` get the equivalent treatment via `SKILL_PATH_SUBSTITUTIONS` (a separate table, since skills reference this suite's CLI/data files rather than the shared-policy doc set agents reference) -- including replacing the "Packaged suite note" callout every `SKILL.md` carries (which points at a `suite/` directory this plugin doesn't ship) with an accurate Cline-specific note, and rewriting dangling internal `[references/X.md](references/X.md)`-style links into prose pointers at the now-inlined `# Reference: X.md` sections.
+
+Both tables end in the same fail-loud safety net: any `roster/`-relative or `../`-relative reference left in a generated body that isn't covered by a table entry or a named exception stops the script (nonzero exit) rather than shipping a leaked path.
 
 ## Dependencies
 
