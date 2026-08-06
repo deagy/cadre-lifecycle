@@ -220,7 +220,9 @@ Everything else the register generates (`skills/`, `agents/`, `codex-agents/`, `
 - `plugins/lifecycle/.claude-plugin/`, `plugins/lifecycle/.codex-plugin/`, `plugins/lifecycle/tools/` — this sub-plugin's own manifests and bootstrap script; only its `skills/` is register-generated.
 - `plugins/lifecycle-github/`, `plugins/lifecycle-gitlab/` entirely — the register has no concept of these plugins at all.
 
-To refresh generated assets from the Cadre register safely:
+**Automated**: [`.github/workflows/regenerate.yml`](.github/workflows/regenerate.yml) runs this same procedure and opens a PR whenever `deagy/cadre` cuts a new tag (via `repository_dispatch` from that repository's `notify-lifecycle.yml`), or on demand via `workflow_dispatch`. It never merges anything — a human always reviews the PR, same as any other change here. Use the manual procedure below to run it locally (e.g. to preview a diff before the automation would, or if the workflow's `apply_regeneration.py` needs adjusting for a new generated path — see that script's docstring for what it currently knows how to apply).
+
+To refresh generated assets from the Cadre register manually:
 
 ```sh
 git clone https://github.com/deagy/cadre.git
