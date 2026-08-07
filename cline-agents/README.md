@@ -12,7 +12,8 @@ Structurally, this plugin adapts the Cline SDK's own
 plugin (preset discovery from Markdown+YAML-frontmatter files, `start_subagent`
 / `message_subagent` / `get_subagent` / `list_agent_presets` / `list_skills` /
 `get_skill` / `save_handoff` / `read_handoff`), hardened per this port's own
-threat-modeling pass -- see "Hardening vs. the upstream template" below.
+threat-modeling pass -- see ["Hardening vs. upstream
+template"](#hardening-vs-upstream-template) below.
 
 ## `agents/` and `skills/` are regenerated content, not hand-authored
 
