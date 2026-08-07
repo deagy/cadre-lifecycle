@@ -15,6 +15,16 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.10.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.10.1) - 2026-08-07
+
+### Fixed
+
+- **Bumped `cadre-ref.txt` to [`deagy/cadre@v0.16.0`](https://github.com/deagy/cadre/blob/main/CHANGELOG.md) and reapplied regeneration.** Corrections to how the packaged CLI resolves operator settings: the project tier is now anchored to the project being acted on rather than the process's working directory (so a dispatched role's runner binary resolves against the project being dispatched, and the bundled MCP servers no longer read an unrelated checkout's `.agents/cadre.yaml`), executable-valued settings reject a leading `-` and embedded control characters, and secret-shaped-key rejection now walks sequences as well as mappings. No new or changed CLI surface, so nothing here changes how the plugins are invoked. See cadre's own 0.16.0 entry for the detail — this changelog does not restate register-side changes.
+
+  Also ships `suite/docs/examples/role-selection-workflow.md`, a new end-to-end walkthrough from task to dispatched agents, and `suite/roster/shared/README.md`'s reconciliation of the three differently-trusted project-local mechanisms that share `.agents/`.
+
+  This is the first regeneration to land after the `regenerate.yml` patch-truncation fix in 0.10.0, and it exercised the fixed path: the new example doc is a *newly added* file, exactly the class of content the previous `git diff`-based patch silently dropped.
+
 ## [0.10.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.10.0) - 2026-08-07
 
 ### Added
