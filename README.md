@@ -1,5 +1,24 @@
 # Cadre Lifecycle
 
+> [!IMPORTANT]
+> **This repository has moved and is archived.** Cadre, the Agentic SDLC
+> kernel, and this plugin distribution are now one repository:
+> **[`deagy/cadre`](https://github.com/deagy/cadre)**.
+>
+> Existing installs keep working — an archived repository stays cloneable —
+> but this marketplace is frozen and will receive no further releases. To
+> move:
+>
+> ```text
+> /plugin marketplace add deagy/cadre
+> /plugin install cadre@cadre-team
+> /plugin marketplace remove cadre-lifecycle-team
+> ```
+>
+> Lifecycle plugins (`cadre-lifecycle-core` / `-github` / `-gitlab`) keep
+> their names in the new marketplace. Everything below describes the final
+> `v0.11.0` state of this repository.
+
 This repository packages **Cadre role selection** and **Agentic SDLC lifecycle governance** as 4 separate, independently-installable plugins from one source:
 
 - **`cadre`** — role selection. The only plugin most projects need.
