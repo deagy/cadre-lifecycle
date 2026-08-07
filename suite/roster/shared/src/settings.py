@@ -133,8 +133,27 @@ def _reject_secret_shaped_keys(data: dict[str, Any], path_prefix: str, file_path
                 "*.api_key/*.password/*.secret pattern) and must never be stored in a cadre "
                 "config file; secrets are always read from an environment variable"
             )
-        if isinstance(value, dict):
-            _reject_secret_shaped_keys(value, dotted, file_path)
+        _reject_secret_shaped_keys_in_value(value, dotted, file_path)
+
+
+def _reject_secret_shaped_keys_in_value(value: Any, dotted: str, file_path: Path) -> None:
+    """Walk into both mappings and sequences.
+
+    The dict-only walk this replaces meant a secret-shaped key nested under
+    a list (`gitlab:\\n  extra:\\n    - token: "..."`) was never scanned. No
+    registered field is list-shaped today, so such a key could not be
+    *resolved* -- but `write_setting`'s "preserve unknown keys" merge would
+    have round-tripped it into every subsequent rewrite of the file,
+    silently persisting a pasted credential the module's own docstring
+    promises is never stored. Strings are deliberately not descended into
+    (they are values, not key containers).
+    """
+    if isinstance(value, dict):
+        _reject_secret_shaped_keys(value, dotted, file_path)
+        return
+    if isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            _reject_secret_shaped_keys_in_value(item, f"{dotted}[{index}]", file_path)
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +226,26 @@ def _validate_tristate_bool(value: Any, spec: FieldSpec) -> bool | None:
     )
 
 
+def _reject_control_characters(value: str, spec: FieldSpec) -> None:
+    """Reject embedded control characters (newline, tab, NUL, ...).
+
+    None is legitimate in an executable name or a filesystem path, and a
+    newline in particular breaks `cadre config resolve`'s contract of
+    printing exactly one value on stdout for a shell caller to capture --
+    the packaged `bin/cadre` wrapper reads it with `$(...)`, so an embedded
+    newline would silently produce a multi-line value. Reported by position
+    and repr rather than echoed raw, so an invisible character is
+    identifiable in the message.
+    """
+    for index, character in enumerate(value):
+        if character.isprintable():
+            continue
+        raise SettingsError(
+            f"{spec.key} must not contain control characters; found {character!r} "
+            f"at position {index} of {value!r}"
+        )
+
+
 def _has_path_separator(value: str) -> bool:
     if "/" in value:
         return True
@@ -222,11 +261,36 @@ def _validate_executable(value: Any, spec: FieldSpec) -> str:
             f"{spec.key} must be an absolute path or a bare executable name found on PATH, "
             f"not a relative path: {stripped!r}"
         )
+    if stripped.startswith("-"):
+        # A leading '-' is read as an option by the thing that runs this
+        # value, not as a program name. Verified under bash:
+        # `bin="-a"; exec "$bin" --provider p.json --version` makes exec
+        # consume `--provider` as -a's argv[0] argument and then attempt to
+        # execute `p.json` -- i.e. a value that looks inert silently
+        # reinterprets the rest of the command line. dash's exec has no -a
+        # and merely fails, but the packaged wrapper is `#!/bin/sh`, which
+        # is bash on some systems. No legitimate executable name or path
+        # begins with '-'; use './-name' or an absolute path if one ever
+        # does.
+        raise SettingsError(
+            f"{spec.key} must not begin with '-' (it would be parsed as an option by the "
+            f"program that runs it, not as a command): {stripped!r}"
+        )
+    _reject_control_characters(stripped, spec)
+    # Internal spaces are deliberately allowed: '/opt/My Tools/bin/x' is a
+    # legitimate path, every consumer quotes the value ("$sdlc_bin",
+    # subprocess list form), and rejecting them would break real installs
+    # for no security gain.
     return stripped
 
 
 def _validate_path(value: Any, spec: FieldSpec) -> str:
-    return _validate_string(value, spec)
+    stripped = _validate_string(value, spec)
+    # Same reasoning as the executable validator: a newline here would also
+    # break `cadre config resolve`'s one-value-per-line stdout contract.
+    # Internal spaces stay legal -- paths routinely contain them.
+    _reject_control_characters(stripped, spec)
+    return stripped
 
 
 _VALIDATORS: dict[str, Callable[[Any, FieldSpec], Any]] = {
@@ -337,6 +401,9 @@ def known_keys() -> list[str]:
 
 _FILE_CACHE: dict[str, dict[str, Any]] = {}
 _INTERACTIVE_DISABLED = False
+# See disable_project_tier_cwd_fallback(). Only suppresses the *implicit*
+# cwd anchor; an explicit start= is always honored.
+_PROJECT_TIER_CWD_FALLBACK_DISABLED = False
 
 
 def reset_cache() -> None:
@@ -353,6 +420,33 @@ def disable_interactive() -> None:
     channel and prompting would corrupt it."""
     global _INTERACTIVE_DISABLED
     _INTERACTIVE_DISABLED = True
+
+
+def disable_project_tier_cwd_fallback() -> None:
+    """Stop treating this process's working directory as a project anchor.
+
+    When `start=` is not passed, the project tier is discovered by walking
+    up from `Path.cwd()`. That is right for a CLI a human ran inside a
+    project, and wrong for a long-lived, project-agnostic process -- an
+    stdio MCP server's cwd is wherever its host CLI happened to be
+    launched, which has no relationship to the project a given tool call
+    is about. Resolving a `project_or_global` field from that incidental
+    directory means an unrelated checkout's `.agents/cadre.yaml` can steer
+    a call it has nothing to do with.
+
+    After this is called, a resolution with no explicit `start=` skips the
+    project tier entirely rather than guessing from cwd. An explicit
+    `start=<path>` is still honored -- it is a validated anchor the caller
+    supplied on purpose (e.g. `dispatch_core`'s `project_root`), not an
+    ambient one -- so a server can still resolve correctly for the project
+    a tool call actually names.
+
+    Mirrors `disable_interactive()`: call it unconditionally at an entry
+    point, never from shared core logic, since the same core is also
+    imported by CLIs where cwd *is* the right anchor.
+    """
+    global _PROJECT_TIER_CWD_FALLBACK_DISABLED
+    _PROJECT_TIER_CWD_FALLBACK_DISABLED = True
 
 
 def _global_config_dir(env: dict[str, str]) -> Path:
@@ -384,6 +478,11 @@ def _reject_symlink_escape_on_read(candidate: Path) -> Path:
 
 
 def _project_config_candidates(start: Path | None) -> tuple[Path | None, Path | None]:
+    # No explicit anchor, and this process has declared its cwd meaningless
+    # (see disable_project_tier_cwd_fallback) -- skip the project tier
+    # rather than walking up from an incidental directory.
+    if start is None and _PROJECT_TIER_CWD_FALLBACK_DISABLED:
+        return None, None
     yaml_path = find_file_at_project_root(PROJECT_CONFIG_DIR / f"{PROJECT_CONFIG_BASENAME}.yaml", start)
     json_path = find_file_at_project_root(PROJECT_CONFIG_DIR / f"{PROJECT_CONFIG_BASENAME}.json", start)
     if yaml_path is not None:
@@ -710,6 +809,15 @@ def _resolve_core(
             checks.append(f"{project_path} -> found, key explicitly null (not set at this tier)")
         else:
             checks.append(f"{project_path} -> found, key absent")
+    elif start is None and _PROJECT_TIER_CWD_FALLBACK_DISABLED:
+        # Don't name a cwd-derived path here -- this process declared its
+        # working directory meaningless, so quoting it would send the
+        # reader to a file that was never consulted and would not be read
+        # even if they created it.
+        checks.append(
+            "project-local config -> not consulted (no project anchor supplied and this "
+            "process does not treat its working directory as one)"
+        )
     else:
         yaml_candidate, _json_candidate = _project_config_candidates(start)
         expected = yaml_candidate if yaml_candidate is not None else (
