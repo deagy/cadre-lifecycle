@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { z } from "zod";
-import { type AgentPlugin, createTool } from "@cline/sdk";
+import { type AgentPlugin, type AgentToolContext, createTool } from "@cline/sdk";
 import { safeJsonStringify } from "@cline/shared";
 
 const execFileAsync = promisify(execFile);
@@ -158,13 +158,23 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
       // the tool declaration itself for every call. Converting here removes
       // the dependency on that cross-realm check entirely.
       inputSchema: z.toJSONSchema(AgentsSelectInputSchema),
-      execute: async (rawInput: unknown): Promise<Record<string, unknown> | AgentsSelectError> => {
+      execute: async (
+        rawInput: unknown,
+        context: AgentToolContext,
+      ): Promise<Record<string, unknown> | AgentsSelectError> => {
         const input = AgentsSelectInputSchema.parse(rawInput);
         if (!rootPath) {
           return sanitizeToolResult({
             error:
               "Could not resolve the workspace root from the host session; agents_select requires a known " +
               "workspace root and will not fall back to the process's current directory.",
+            // "" not undefined: sanitizeToolResult JSON-round-trips every
+            // result, and JSON.stringify silently drops undefined-valued
+            // keys -- an undefined stderr here would vanish just like an
+            // omitted one, achieving no actual consistency with the
+            // CLI-failure catch path below, which always carries a real
+            // (possibly empty) stderr string.
+            stderr: "",
           }) as AgentsSelectError;
         }
 
@@ -172,7 +182,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
           const { stdout } = await execFileAsync(
             CADRE_BIN,
             buildSelectArgs(input, rootPath),
-            { cwd: rootPath },
+            { cwd: rootPath, signal: context.signal },
           );
           return sanitizeToolResult(JSON.parse(stdout));
         } catch (caught) {

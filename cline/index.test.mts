@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { AgentTool } from "@cline/sdk";
+import type { AgentTool, AgentToolContext } from "@cline/sdk";
 import { plugin, type SetupApi, type SetupContext } from "./index.ts";
 
 const execFileAsync = promisify(execFile);
@@ -148,6 +148,28 @@ describe("cadre plugin", () => {
     expect(result.error).toMatch(/--base cannot be combined with --files/);
   });
 
+  it("agents_select propagates context.signal so an aborted call cancels the underlying process", async () => {
+    const tools = await registerTools(REPO_ROOT);
+    const tool = findTool(tools, "agents_select");
+
+    const controller = new AbortController();
+    controller.abort();
+
+    // Node's execFile refuses to spawn at all for an already-aborted
+    // signal, rejecting synchronously with an AbortError -- the fastest,
+    // most deterministic way to prove context.signal actually reaches
+    // execFileAsync (as opposed to being silently dropped, which would
+    // instead run the real CLI to completion and return a normal plan).
+    const result = (await tool.execute(
+      { task: "test", files: "README.md" },
+      { signal: controller.signal } as AgentToolContext,
+    )) as Record<string, unknown>;
+
+    expect(result.status).toBeUndefined();
+    expect(typeof result.error).toBe("string");
+    expect(result.error).toMatch(/abort/i);
+  });
+
   it("agents_select returns a structured error when the workspace root could not be resolved", async () => {
     const tools = await registerTools(undefined);
     const tool = findTool(tools, "agents_select");
@@ -159,6 +181,14 @@ describe("cadre plugin", () => {
 
     expect(typeof result.error).toBe("string");
     expect(result.error).toMatch(/workspace root/i);
+    // Structural consistency with the CLI-failure catch path below, which
+    // always sets both `error` and `stderr` -- a consumer iterating over
+    // error response fields should never have to guess whether `stderr` is
+    // present depending on which error source produced the result. Must be
+    // "" not undefined: sanitizeToolResult's JSON round-trip silently drops
+    // undefined-valued keys, so only a real (if empty) string actually
+    // survives to the caller.
+    expect(result.stderr).toBe("");
   });
 
   it("agents_select result is fully re-serializable (sanitizeToolResult guards against cycles)", async () => {
