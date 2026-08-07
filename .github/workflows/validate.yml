@@ -122,10 +122,23 @@ jobs:
       # declares as kernel_compatibility.minimum, the same one
       # plugins/lifecycle/tools/bootstrap_sdlc.py installs for a human
       # operator, read dynamically so this step can't itself drift stale.
+      # `provider.json` is checked out from the PR's own head (this workflow
+      # triggers on plain `pull_request`, not `pull_request_target`) -- a PR
+      # editing kernel_compatibility.minimum controls what this step fetches.
+      # Validate it's well-formed MAJOR.MINOR.PATCH before it ever reaches
+      # the git ref, exactly like tools/plugin_version.py's SEMVER_PATTERN
+      # and bootstrap_sdlc.py's own read_kernel_compatibility() do for the
+      # same field elsewhere in this repo -- fail closed on anything else
+      # (found in review of PR #34) rather than let an arbitrary string flow
+      # into `git+...@v<string>`.
       - name: Install the pinned Agentic SDLC kernel
         run: |
           set -eu
           minimum=$(python3 -c "import json; print(json.load(open('provider.json'))['kernel_compatibility']['minimum'])")
+          echo "$minimum" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || {
+            echo "::error::provider.json kernel_compatibility.minimum ('$minimum') is not MAJOR.MINOR.PATCH semver" >&2
+            exit 1
+          }
           pip install --user "git+https://github.com/deagy/agentic-sdlc.git@v${minimum}#subdirectory=plugins/agentic-sdlc"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       # package.json declares npm workspaces (cline, cline-agents,

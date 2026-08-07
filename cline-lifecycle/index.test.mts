@@ -12,7 +12,9 @@ import {
   type SetupContext,
   buildPublishGateStatusArgs,
   buildCreateGateIssuesGitlabArgs,
+  buildCreateGithubGateIssuesArgs,
   buildRequestGateReviewersGitlabArgs,
+  buildRequestGateReviewersGithubArgs,
 } from "./index.ts";
 
 const execFileAsync = promisify(execFile);
@@ -314,13 +316,17 @@ describe("cadre-lifecycle plugin", () => {
     // tests below, these can't be fooled by a missing/stale kernel binary
     // into passing vacuously, and are the right tool for asserting a
     // branch/join was built correctly rather than merely "didn't throw".
-    // Covers two gaps a prior review round found untested: the
+    // Covers gaps two review rounds found untested: the
     // sdlc_publish_gate_status discriminated union's GitHub branch (only
-    // the GitLab branch had any coverage, even at the smoke-test level),
-    // and the `gates` array -> comma-separated `--gates` string join shared
-    // by several builders (buildCreateGateIssuesGitlabArgs and
-    // buildRequestGateReviewersGitlabArgs here stand in for all of them --
-    // the join is the exact same one-line expression at every call site).
+    // the GitLab branch had any coverage, even at the smoke-test level), and
+    // the `gates` array -> comma-separated `--gates` string join used by
+    // buildCreateGateIssuesGitlabArgs/buildCreateGithubGateIssuesArgs and
+    // buildRequestGateReviewersGitlabArgs/buildRequestGateReviewersGithubArgs
+    // -- both the GitLab and GitHub side of each pair are exported and
+    // tested here (a first round only covered the GitLab side and treated
+    // it as standing in for both, which a follow-up review correctly
+    // called out as an overclaim -- the expression is identical, but
+    // "identical code" and "tested code" aren't the same thing).
 
     it("buildPublishGateStatusArgs (gitlab branch) emits --project-path/--mr-iid, not --repo/--pr", () => {
       const args = buildPublishGateStatusArgs(
@@ -408,6 +414,50 @@ describe("cadre-lifecycle plugin", () => {
       );
       const withAbsent = buildRequestGateReviewersGitlabArgs(
         { taskId: "t1", projectPath: "group/project", mrIid: 1, asBot: "bot" },
+        "/root",
+      );
+      expect(withEmpty).not.toContain("--gates");
+      expect(withAbsent).not.toContain("--gates");
+    });
+
+    // GitHub-side counterparts of the two `gates` tests above -- a prior
+    // review round found the GitLab-side pair was exported and tested but
+    // the identical `input.gates?.length ? args.push("--gates", ...) : ...`
+    // expression in the GitHub builders was left with zero coverage despite
+    // a code comment implying the GitLab pair "stood in for all of them."
+
+    it("buildCreateGithubGateIssuesArgs joins a gates array into a single comma-separated --gates value", () => {
+      const args = buildCreateGithubGateIssuesArgs(
+        { taskId: "t1", repo: "owner/repo", asBot: "bot", gates: ["G3", "G9"] },
+        "/root",
+      );
+      const gatesIndex = args.indexOf("--gates");
+      expect(gatesIndex).toBeGreaterThan(-1);
+      expect(args[gatesIndex + 1]).toBe("G3,G9");
+      expect(args).not.toContain("G3");
+      expect(args).not.toContain("G9");
+    });
+
+    it("buildCreateGithubGateIssuesArgs includes --allow-public-repo only when explicitly set", () => {
+      const withFlag = buildCreateGithubGateIssuesArgs(
+        { taskId: "t1", repo: "owner/repo", asBot: "bot", allowPublicRepo: true },
+        "/root",
+      );
+      const withoutFlag = buildCreateGithubGateIssuesArgs(
+        { taskId: "t1", repo: "owner/repo", asBot: "bot" },
+        "/root",
+      );
+      expect(withFlag).toContain("--allow-public-repo");
+      expect(withoutFlag).not.toContain("--allow-public-repo");
+    });
+
+    it("buildRequestGateReviewersGithubArgs omits --gates entirely when the array is empty or absent", () => {
+      const withEmpty = buildRequestGateReviewersGithubArgs(
+        { taskId: "t1", repo: "owner/repo", pr: 1, asBot: "bot", gates: [] },
+        "/root",
+      );
+      const withAbsent = buildRequestGateReviewersGithubArgs(
+        { taskId: "t1", repo: "owner/repo", pr: 1, asBot: "bot" },
         "/root",
       );
       expect(withEmpty).not.toContain("--gates");

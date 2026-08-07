@@ -767,12 +767,20 @@ async function runCadreSdlc(args: string[], rootPath: string): Promise<Record<st
 // `cmd_create_gate_issues`/`cmd_create_github_gate_issues` in the kernel
 // source: both print the full JSON result to stdout, then `return 2`). Exit 1
 // is reserved for a genuine structural failure in all four (MR/PR not found,
-// identity mismatch, malformed request). Plain `runCadreSdlc` would discard a
-// real exit-2 report's stdout -- including, for the two create-issues
-// commands, the `plan_digest` a subsequent `apply: true` call needs, and any
-// confirmation that a write already happened -- and misreport it as an opaque
-// error; this variant parses `err.stdout` as JSON first and only falls back
-// to the generic error shape if that fails (the exit-1 case).
+// identity mismatch, malformed request) -- with one caveat found in review:
+// a *concurrent* plan-digest mismatch mid-`--apply` also exits 2, but that
+// specific path raises `GateIssuesBlocked`, which the kernel prints only as
+// a prose `{"error": "..."}` on stderr, not the full structured result --
+// so this helper's `err.stdout` is empty there and it falls through to the
+// same generic error shape a real exit-1 would produce (still safe: no
+// false success, no crash, just a less-structured message than the
+// ordinary refusals-on-a-completed-run case gets). Plain `runCadreSdlc`
+// would discard a real exit-2 report's stdout -- including, for the two
+// create-issues commands, the `plan_digest` a subsequent `apply: true` call
+// needs, and, in the ordinary (non-concurrent-mismatch) case, confirmation
+// of what was already created -- and misreport it as an opaque error; this
+// variant parses `err.stdout` as JSON first and only falls back to the
+// generic error shape if that fails.
 async function runCadreSdlcAllowingReportExitCodes(
   args: string[],
   rootPath: string,
@@ -832,7 +840,13 @@ export type {
 // implementation when no kernel is installed to reject a malformed
 // invocation (see index.test.mts's "argument construction (kernel-free)"
 // tests).
-export { buildPublishGateStatusArgs, buildCreateGateIssuesGitlabArgs, buildRequestGateReviewersGitlabArgs };
+export {
+  buildPublishGateStatusArgs,
+  buildCreateGateIssuesGitlabArgs,
+  buildCreateGithubGateIssuesArgs,
+  buildRequestGateReviewersGitlabArgs,
+  buildRequestGateReviewersGithubArgs,
+};
 
 const setup = (api: SetupApi, ctx: SetupContext) => {
   const rootPath = ctx.workspaceInfo?.rootPath;
