@@ -621,27 +621,32 @@ describe("cadre-lifecycle plugin", () => {
 
     describe("kernel subcommands not shipped by every agentic-sdlc release in range", () => {
       // These 10 tools wrap kernel subcommands the packaged skills document
-      // but that the kernel version actually installed in this environment
-      // doesn't have -- see index.ts's "About this plugin" comment. Rather
-      // than skip testing them, assert the one thing that must always hold
-      // regardless of kernel version: the tool returns a structured result
-      // object (never a throw). Today that result is `{error, stderr}`
-      // ("invalid choice"); once a kernel that ships these subcommands is
-      // installed, it becomes a real success/refusal shape instead -- that
-      // transition is a kernel-upgrade concern, not a regression in this
-      // plugin's argument-building/pass-through, so these assertions check
-      // "did we get a structured result", not "did it fail".
+      // that were, when first added, missing from the kernel version this
+      // plugin's development environment had installed -- see index.ts's
+      // "About this plugin" comment. `provider.json` now pins
+      // `kernel_compatibility.minimum` to the fixed agentic-sdlc release, so
+      // in any environment satisfying that pin (this one included) these
+      // subcommands always return a real success/refusal shape, never the
+      // historical "invalid choice" argparse failure -- assert the real
+      // shape, the same way sdlc_init/sdlc_plan's tests do, not just
+      // `toBeTypeOf("object")` (which would also pass against a stale
+      // "invalid choice" error and so proves nothing about kernel support).
+      // The 4 read-only list-* tools need no seed data and always succeed;
+      // the other 6 write-style tools need a run record this repository's
+      // checkout never has, so they always hit the same genuine, structured
+      // ENOENT refusal instead.
 
-      it("sdlc_list_gate_issues_gitlab returns a structured result, not a throw", async () => {
+      it("sdlc_list_gate_issues_gitlab returns a real ledger, not an error", async () => {
         const tools = await registerTools(REPO_ROOT);
         const result = (await findTool(tools, "sdlc_list_gate_issues_gitlab").execute(
           { taskId: "cline-lifecycle-test-nonexistent-task" },
           {} as never,
         )) as Record<string, unknown>;
-        expect(result).toBeTypeOf("object");
+        expect(result.error).toBeUndefined();
+        expect(result.entries).toEqual({});
       });
 
-      it("sdlc_create_gate_issues_gitlab returns a structured result, not a throw", async () => {
+      it("sdlc_create_gate_issues_gitlab returns a structured error for a task with no run record", async () => {
         const tools = await registerTools(REPO_ROOT);
         const result = (await findTool(tools, "sdlc_create_gate_issues_gitlab").execute(
           {
@@ -651,19 +656,20 @@ describe("cadre-lifecycle plugin", () => {
           },
           {} as never,
         )) as Record<string, unknown>;
-        expect(result).toBeTypeOf("object");
+        expect(typeof result.error).toBe("string");
       });
 
-      it("sdlc_list_github_gate_issues returns a structured result, not a throw", async () => {
+      it("sdlc_list_github_gate_issues returns a real ledger, not an error", async () => {
         const tools = await registerTools(REPO_ROOT);
         const result = (await findTool(tools, "sdlc_list_github_gate_issues").execute(
           { taskId: "cline-lifecycle-test-nonexistent-task" },
           {} as never,
         )) as Record<string, unknown>;
-        expect(result).toBeTypeOf("object");
+        expect(result.error).toBeUndefined();
+        expect(result.entries).toEqual({});
       });
 
-      it("sdlc_create_github_gate_issues returns a structured result, not a throw", async () => {
+      it("sdlc_create_github_gate_issues returns a structured error for a task with no run record", async () => {
         const tools = await registerTools(REPO_ROOT);
         const result = (await findTool(tools, "sdlc_create_github_gate_issues").execute(
           {
@@ -674,19 +680,21 @@ describe("cadre-lifecycle plugin", () => {
           },
           {} as never,
         )) as Record<string, unknown>;
-        expect(result).toBeTypeOf("object");
+        expect(typeof result.error).toBe("string");
       });
 
-      it("sdlc_list_gate_status returns a structured result, not a throw", async () => {
+      it("sdlc_list_gate_status returns real per-forge ledgers, not an error", async () => {
         const tools = await registerTools(REPO_ROOT);
         const result = (await findTool(tools, "sdlc_list_gate_status").execute(
           { taskId: "cline-lifecycle-test-nonexistent-task" },
           {} as never,
         )) as Record<string, unknown>;
-        expect(result).toBeTypeOf("object");
+        expect(result.error).toBeUndefined();
+        expect(result).toHaveProperty("github");
+        expect(result).toHaveProperty("gitlab");
       });
 
-      it("sdlc_publish_gate_status (gitlab) returns a structured result, not a throw", async () => {
+      it("sdlc_publish_gate_status (gitlab) returns a structured error for a task with no run record", async () => {
         const tools = await registerTools(REPO_ROOT);
         const result = (await findTool(tools, "sdlc_publish_gate_status").execute(
           {
@@ -699,10 +707,10 @@ describe("cadre-lifecycle plugin", () => {
           },
           {} as never,
         )) as Record<string, unknown>;
-        expect(result).toBeTypeOf("object");
+        expect(typeof result.error).toBe("string");
       });
 
-      it("sdlc_publish_gate_status (github) returns a structured result, not a throw", async () => {
+      it("sdlc_publish_gate_status (github) returns a structured error for a task with no run record", async () => {
         const tools = await registerTools(REPO_ROOT);
         const result = (await findTool(tools, "sdlc_publish_gate_status").execute(
           {
@@ -715,10 +723,10 @@ describe("cadre-lifecycle plugin", () => {
           },
           {} as never,
         )) as Record<string, unknown>;
-        expect(result).toBeTypeOf("object");
+        expect(typeof result.error).toBe("string");
       });
 
-      it("sdlc_request_gate_reviewers_gitlab returns a structured result, not a throw", async () => {
+      it("sdlc_request_gate_reviewers_gitlab returns a structured error for a task with no run record", async () => {
         const tools = await registerTools(REPO_ROOT);
         const result = (await findTool(tools, "sdlc_request_gate_reviewers_gitlab").execute(
           {
@@ -730,10 +738,10 @@ describe("cadre-lifecycle plugin", () => {
           },
           {} as never,
         )) as Record<string, unknown>;
-        expect(result).toBeTypeOf("object");
+        expect(typeof result.error).toBe("string");
       });
 
-      it("sdlc_request_gate_reviewers_github returns a structured result, not a throw", async () => {
+      it("sdlc_request_gate_reviewers_github returns a structured error for a task with no run record", async () => {
         const tools = await registerTools(REPO_ROOT);
         const result = (await findTool(tools, "sdlc_request_gate_reviewers_github").execute(
           {
@@ -745,19 +753,20 @@ describe("cadre-lifecycle plugin", () => {
           },
           {} as never,
         )) as Record<string, unknown>;
-        expect(result).toBeTypeOf("object");
+        expect(typeof result.error).toBe("string");
       });
 
-      it("sdlc_list_reviewer_nudge returns a structured result, not a throw", async () => {
+      it("sdlc_list_reviewer_nudge returns a real ledger, not an error", async () => {
         const tools = await registerTools(REPO_ROOT);
         const result = (await findTool(tools, "sdlc_list_reviewer_nudge").execute(
           { taskId: "cline-lifecycle-test-nonexistent-task" },
           {} as never,
         )) as Record<string, unknown>;
-        expect(result).toBeTypeOf("object");
+        expect(result.error).toBeUndefined();
+        expect(result.entries).toEqual([]);
       });
 
-      it("sdlc_publish_reviewer_nudge returns a structured result, not a throw", async () => {
+      it("sdlc_publish_reviewer_nudge returns a structured error for a task with no run record", async () => {
         const tools = await registerTools(REPO_ROOT);
         const result = (await findTool(tools, "sdlc_publish_reviewer_nudge").execute(
           {
@@ -769,7 +778,7 @@ describe("cadre-lifecycle plugin", () => {
           },
           {} as never,
         )) as Record<string, unknown>;
-        expect(result).toBeTypeOf("object");
+        expect(typeof result.error).toBe("string");
       });
     });
 
