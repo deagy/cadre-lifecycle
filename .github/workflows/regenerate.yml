@@ -168,7 +168,21 @@ jobs:
 
       - name: Save the diff as a patch artifact
         if: steps.diff.outputs.changed == 'true'
-        run: git diff --binary > "$RUNNER_TEMP/regeneration.patch"
+        # `git add -A` first, then diff the INDEX -- not the worktree.
+        # A plain `git diff` reports only tracked files, so every file a
+        # cadre release newly adds (e.g. roster/shared/src/settings.py in
+        # v0.15.0) was silently dropped from this patch while the
+        # `changed` check above still said "true" -- it uses
+        # `git status --porcelain`, which does see untracked files. The
+        # result was a PR that updated existing modules to import a new
+        # module the same PR never added, i.e. a package whose `cadre
+        # select`/`cadre config` died with ModuleNotFoundError. Staging
+        # first also captures deletions, so a removed generated file
+        # propagates too.
+        run: |
+          set -eu
+          git add -A
+          git diff --cached --binary > "$RUNNER_TEMP/regeneration.patch"
 
       - name: Upload patch artifact
         if: steps.diff.outputs.changed == 'true'
