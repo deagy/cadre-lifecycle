@@ -89,10 +89,13 @@ cline doctor fix
 
 ### Claude Code
 
-Add this repository as a marketplace once (pin to a release tag), then install whichever plugins you want:
+Add this repository as a marketplace once (pin to a release tag — check [the
+releases page](https://github.com/deagy/cadre-lifecycle/releases) for the
+current tag rather than trusting the one written here), then install
+whichever plugins you want:
 
 ```text
-/plugin marketplace add deagy/cadre-lifecycle@v0.7.0
+/plugin marketplace add deagy/cadre-lifecycle@v0.9.8
 /plugin install cadre@cadre-lifecycle-team
 
 # Optional — only if you want forge-agnostic-only G1–G10 lifecycle governance:
@@ -108,10 +111,13 @@ Add this repository as a marketplace once (pin to a release tag), then install w
 
 ### Codex CLI
 
-Clone at the tag first, add the marketplace once, then install whichever plugins you want:
+Clone at the tag first (check [the releases
+page](https://github.com/deagy/cadre-lifecycle/releases) for the current tag
+rather than trusting the one written here), add the marketplace once, then
+install whichever plugins you want:
 
 ```sh
-git clone --branch v0.7.0 https://github.com/deagy/cadre-lifecycle.git
+git clone --branch v0.9.8 https://github.com/deagy/cadre-lifecycle.git
 codex plugin marketplace add /path/to/cadre-lifecycle
 codex plugin add cadre@cadre-lifecycle-team
 
