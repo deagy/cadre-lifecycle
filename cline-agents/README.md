@@ -195,12 +195,13 @@ minus the ability to shadow a reserved bundled agent name:
 
 Each source role body ends with an identical appended shared-policy block containing source-repo-relative path references (e.g. `` `../../shared/team-profile.yaml` ``, `roster/shared/README.md`) that resolve inside the *source* Cadre register/catalog layout but would 404 in an arbitrary consumer project. `tools/port_cline_agents.py`'s `PATH_SUBSTITUTIONS` table is the authoritative, current list of every such rewrite -- read that, not this paragraph, for the exact current mapping; duplicating it here would just go stale.
 
-Four roles need a closer look rather than a purely mechanical rewrite (two via `ROLE_OVERRIDES`, one via a dedicated code path, one via a table entry whose source string is unique to that file -- see `tools/port_cline_agents.py` for exactly which), and the regeneration's own regression test (`tools/test_port_cline_agents.py`) fails if any of them silently reverts to the old committed behavior:
-
-- **`application-engineer`** -- this role's entire purpose is maintaining *this cadre-lifecycle source repository's own tooling* (`roster/catalog.yaml`, `roster/orchestration/routing.yaml`, the `cadre generate-plugin` regeneration flow). Those references, outside the shared-policy block, are the literal subject of the role, so they are left unrewritten with an appended port note: this preset is only meaningful against a checkout of the cadre-lifecycle/cadre register repositories, not an arbitrary consumer project. (Exempt from the script's fail-loud leak check for this reason.)
-- **`debugging-engineer`** -- one bullet named a cadre-suite-internal filename (`` `AGENT.md` ``) for an occasional meta-task within an otherwise general-purpose debugging role. Reworded to describe "an agent definition's authority, catalog/registry registration, ..." generically instead.
-- **`threat-modeler`** -- one line's `roster/shared/output-schemas/finding.schema.json` reference is rewritten to "this project's finding output schema" rather than the generic "...documentation" phrasing the rest of the table uses.
-- **`knowledge-store-steward`** -- one `` `SECURITY.md` `` parenthetical gets an added explanatory clause ("see this project's security documentation for the exact default-resolution behavior") rather than the bare generic substitution used everywhere else that filename appears.
+Four roles (`application-engineer`, `debugging-engineer`, `threat-modeler`,
+`knowledge-store-steward`) need a closer look rather than a purely mechanical
+rewrite; `tools/port_cline_agents.py`'s `ROLE_OVERRIDES` table and its
+surrounding comments are the authoritative, current list of exactly what and
+why -- read that, not this paragraph, for the per-role detail. The
+regeneration's own regression test (`tools/test_port_cline_agents.py`) fails
+if any of them silently reverts to the old committed behavior.
 
 `skills/*.md` get the equivalent treatment via `SKILL_PATH_SUBSTITUTIONS` (a separate table, since skills reference this suite's CLI/data files rather than the shared-policy doc set agents reference) -- including replacing the "Packaged suite note" callout every `SKILL.md` carries (which points at a `suite/` directory this plugin doesn't ship) with an accurate Cline-specific note, and rewriting dangling internal `[references/X.md](references/X.md)`-style links into prose pointers at the now-inlined `# Reference: X.md` sections.
 
@@ -208,16 +209,11 @@ Both tables end in the same fail-loud safety net: any `roster/`-relative or `../
 
 ## Dependencies
 
-`yaml` is declared as a direct dependency (not just relied on transitively)
-because this plugin's own code (`parseFrontmatter` in `index.ts`) calls it
-directly to parse each preset's Markdown frontmatter block. It is already
-present transitively via `@cline/sdk` -> `@cline/core`, which pins `yaml` to
-`^2.8.2`; the direct pin here is kept at `2.9.0` (the version `@cline/core`'s
-range already resolves to) so npm dedupes to a single installed copy instead
-of installing a second nested `yaml` version. `@cline/shared` is *not*
-declared as a direct dependency despite being a dependency of `@cline/core`:
-nothing in this plugin imports from it directly, so it is left to install
-transitively rather than being redundantly pinned here.
+`yaml` is declared as a direct dependency because this plugin's own code
+(`parseFrontmatter` in `index.ts`) calls it directly to parse each preset's
+Markdown frontmatter block; the pin is kept in step with the version
+`@cline/core` already resolves to, so npm dedupes to a single installed
+copy. See `package.json` for the exact pinned version.
 
 ## Configuration
 

@@ -95,9 +95,16 @@ this identity sentence to reach the model once this plugin is installed.
 
 ## Behavioral detail
 
-See [`index.test.mts`](index.test.mts) for the authoritative behavior: tool
-registration, dispatch-plan shape, `taskId` handling, and the needs-triage
-fallback for an unroutable task.
+`agents_select` is the plugin's only tool. Called with no arguments it
+discovers changed files from git status against the working tree; pass
+`base` to diff `<base>...HEAD` instead. An explicit `taskId` is honored
+verbatim in the returned plan; otherwise one is derived. A scope with no
+matching route returns `status: "needs-triage"` rather than an empty or
+guessed plan. `requireSdlc` is off by default (the plan degrades to
+standalone mode when Agentic SDLC is unavailable) and, when set, hard-fails
+instead of silently continuing without gate metadata. Dispatch failures and
+an unresolvable workspace root are both returned as structured errors, never
+thrown. See [`index.test.mts`](index.test.mts) for the exact assertions.
 
 ## Development
 

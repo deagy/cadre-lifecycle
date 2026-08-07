@@ -49,23 +49,12 @@ here, one tool per subcommand:
 NOT mirrored: both just wrap `bin/cadre sdlc status`, i.e. exactly what
 `sdlc_status` above already calls — there is nothing new to wrap.
 
-**Kernel-version history:** `create-gate-issues`, `list-gate-issues`,
-`create-github-gate-issues`, `list-github-gate-issues`, `publish-gate-status`,
-`list-gate-status`, `request-gate-reviewers-gitlab`, `request-gate-reviewers`,
-`publish-reviewer-nudge`, and `list-reviewer-nudge` (10 of the 16 — every
-GitLab/GitHub tool except the 6 approve/link ones) were documented by the
-packaged skills but **missing** ("invalid choice") from the `agentic-sdlc`
-version installed when these 10 tools were first added here, despite being
-within this repository's then-declared `kernel_compatibility` range. Traced
-upstream: `agentic-sdlc`'s own `VERSION` constant hadn't been bumped across 9
-tagged releases that actually shipped these subcommands — fixed in
-`deagy/agentic-sdlc` v0.13.0 (see that repo's `agentic_sdlc/__init__.py`).
-This repository's `provider.json` now pins `kernel_compatibility.minimum` to
-that fixed release (`[0.13.0, 1.0.0)`), and all 10 tools have been
-live-verified against it. This was never Cline-specific — Claude Code and
-Codex hit the identical error running the same commands their own skills
-document, against the same stale kernel. If you're on an older pinned
-kernel, `agentic-sdlc <subcommand> --help` will tell you.
+This repository's `provider.json` pins `kernel_compatibility.minimum` to
+`agentic-sdlc` [v0.13.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.13.0)
+or later — 10 of the 16 GitLab/GitHub tools require it (see CHANGELOG.md for
+why). If a tool call fails with "invalid choice" on an older pinned kernel,
+`agentic-sdlc <subcommand> --help` will tell you what that kernel actually
+supports.
 
 ## Requires the external `agentic-sdlc` kernel
 
@@ -203,16 +192,25 @@ to surface as any of the four tools' `error` field otherwise.
 
 ## Behavioral detail
 
-See [`index.test.mts`](index.test.mts) for the authoritative behavior: tool
-registration, argument construction (kernel-free), real `bin/cadre sdlc`
-subprocess outcomes (structured errors for an un-onboarded project or a
-nonexistent task, a real dry-run preview for `sdlc_init`), and the
-missing-root failure mode. [`index.exitcode.test.mts`](index.exitcode.test.mts)
-is a separate file specifically for `runCadreSdlcAllowingReportExitCodes`'s
-exit-code-branching behavior — it mocks `node:child_process` at module level
-(to deterministically exercise the exit-2-with-JSON-on-stdout path a live
-kernel call can't reliably reproduce), so it can't share a file with
-`index.test.mts`'s real, unmocked subprocess tests.
+Every tool wraps a `bin/cadre sdlc` subcommand and adds no approval logic of
+its own — separation of duties is enforced entirely by the external kernel.
+Each tool throws if no `root` argument is given and no workspace root could
+be resolved; otherwise it runs the real subprocess and returns a structured
+error (never a thrown exception or a false success) for cases like an
+un-onboarded project, a task with no run record, or a nonexistent
+task/gate. `sdlc_init` supports a real dry-run preview against a scratch
+project. A handful of kernel subcommands are gated behind
+`kernel_compatibility` since not every `agentic-sdlc` release in range ships
+them yet — see the tests for exactly which.
+
+[`index.test.mts`](index.test.mts) covers all of the above against a real,
+unmocked `bin/cadre sdlc` subprocess.
+[`index.exitcode.test.mts`](index.exitcode.test.mts) is a separate file
+specifically for `runCadreSdlcAllowingReportExitCodes`'s exit-code-branching
+behavior — it mocks `node:child_process` at module level (to deterministically
+exercise the exit-2-with-JSON-on-stdout path a live kernel call can't
+reliably reproduce), so it can't share a file with `index.test.mts`'s
+real-subprocess tests.
 
 ## Development
 
