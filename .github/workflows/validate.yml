@@ -44,12 +44,9 @@ jobs:
       # `npm ci` must run from the repo root -- a per-directory lockfile no
       # longer exists.
       - run: npm ci
-      - run: npm test
-        working-directory: cline
-      - run: npm run typecheck
-        working-directory: cline
-      - run: npm run lint
-        working-directory: cline
+      - run: npm test --workspace=cline
+      - run: npm run typecheck --workspace=cline
+      - run: npm run lint --workspace=cline
 
   cline-agents-plugin:
     name: cline-agents/ (npm test, typecheck)
@@ -91,16 +88,13 @@ jobs:
         run: npm ci
       - name: npm test
         if: steps.probe.outputs.present == 'true'
-        working-directory: cline-agents
-        run: npm test
+        run: npm test --workspace=cline-agents
       - name: npm run typecheck
         if: steps.probe.outputs.present == 'true'
-        working-directory: cline-agents
-        run: npm run typecheck
+        run: npm run typecheck --workspace=cline-agents
       - name: npm run lint
         if: steps.probe.outputs.present == 'true'
-        working-directory: cline-agents
-        run: npm run lint
+        run: npm run lint --workspace=cline-agents
 
   cline-lifecycle-plugin:
     name: cline-lifecycle/ (npm test, typecheck)
@@ -163,11 +157,9 @@ jobs:
       # `npm ci` must run from the repo root -- a per-directory lockfile no
       # longer exists.
       - run: npm ci
-      - run: npm test
-        working-directory: cline-lifecycle
-      - run: npm run typecheck
-      - run: npm run lint
-        working-directory: cline-lifecycle
+      - run: npm test --workspace=cline-lifecycle
+      - run: npm run typecheck --workspace=cline-lifecycle
+      - run: npm run lint --workspace=cline-lifecycle
 
   python-tools:
     name: tools/ and plugins/*/tools (unittest)
