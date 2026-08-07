@@ -1,6 +1,32 @@
 # Cadre Lifecycle
 
-This repository packages **Cadre role selection** and **Agentic SDLC lifecycle governance** as 4 separate, independently-installable plugins from one source: `cadre` (role selection, the only one most projects need) plus 3 optional lifecycle-governance plugins, each self-sufficient and installable in any combination — none requires another.
+This repository packages **Cadre role selection** and **Agentic SDLC lifecycle governance** as 4 separate, independently-installable plugins from one source:
+
+- **`cadre`** — role selection. The only plugin most projects need.
+- **`cadre-lifecycle-core`** — forge-agnostic G1–G10 lifecycle governance UX.
+- **`cadre-lifecycle-github`** — GitHub-flavored gate governance.
+- **`cadre-lifecycle-gitlab`** — GitLab-flavored gate governance.
+
+The 3 lifecycle plugins are each self-sufficient and installable in any combination — none requires another.
+
+## Table of Contents
+
+- [What This Is](#what-this-is)
+- [Repository Layout](#repository-layout)
+- [Installing](#installing)
+  - [Cline](#cline)
+  - [Claude Code](#claude-code)
+  - [Codex CLI](#codex-cli)
+- [System Prompt](#system-prompt)
+- [Using the `agents_select` Tool Call](#using-the-agents_select-tool-call)
+- [Lifecycle Governance with Agentic SDLC](#lifecycle-governance-with-agentic-sdlc)
+  - [CI/CD Integration](#cicd-integration)
+- [Architecture](#architecture)
+- [Development](#development)
+  - [Running Tests](#running-tests)
+  - [Regenerating Assets](#regenerating-assets)
+- [Releasing](#releasing)
+- [License](#license)
 
 ## What This Is
 
@@ -21,7 +47,7 @@ flowchart TB
     gl -- "bin/cadre sdlc" --> kernel
 ```
 
-`cadre`, `cadre-lifecycle-core`, `cadre-lifecycle-github`, and `cadre-lifecycle-gitlab` are 4 separate plugin manifests — install only what you need. The 3 lifecycle plugins are each self-sufficient (no plugin requires another) and only become useful once the external `agentic-sdlc` kernel is installed (typically via one of their bundled bootstrap scripts — see "Lifecycle Governance with Agentic SDLC" below). Installing `cadre-lifecycle-core` alongside a forge plugin is redundant — both ship an onboarding/review/pending-gates skill set, namespaced distinctly by suffixed skill names — but harmless.
+`cadre`, `cadre-lifecycle-core`, `cadre-lifecycle-github`, and `cadre-lifecycle-gitlab` are 4 separate plugin manifests — install only what you need. The 3 lifecycle plugins are each self-sufficient (no plugin requires another). They only become useful once the external `agentic-sdlc` kernel is installed, typically via one of their bundled bootstrap scripts — see "Lifecycle Governance with Agentic SDLC" below. Installing `cadre-lifecycle-core` alongside a forge plugin is redundant, since both ship an onboarding/review/pending-gates skill set (namespaced distinctly by suffixed skill names), but it is harmless.
 
 ## Repository Layout
 
@@ -64,8 +90,14 @@ Install `cadre` for role selection. Only add the lifecycle plugins if you actual
 Three separate Cline plugins live in this repository:
 
 - **`cline`** (this repository's root) — the single `agents_select` planning tool: routes a task via `bin/cadre select` and returns the dispatch plan. Never invokes agents itself.
-- **`cline-agents`** (`cline-agents/` subdirectory) — actually dispatches: `start_subagent`/`message_subagent`/`get_subagent`/`list_agent_presets` (71 bundled role presets), `list_skills`/`get_skill` (this repository's own bundled skills), `dispatch_selected_roles` (calls `bin/cadre select` and immediately dispatches every selected primary/reviewer role in one call, optionally retrieving knowledge-store context first), and `save_handoff`/`read_handoff`. See [`cline-agents/README.md`](cline-agents/README.md) for its full tool table and the SDK-embedding quick start it documents as its primary usage pattern.
-- **`cline-lifecycle`** (`cline-lifecycle/` subdirectory) — G1–G10 Agentic SDLC governance as 21 tool calls: 5 forge-agnostic (`sdlc_init`/`sdlc_validate`/`sdlc_plan`/`sdlc_status`/`sdlc_decide`) plus 16 forge-specific (7 GitLab, 7 GitHub, 2 shared — mirroring every `cadre-lifecycle-gitlab`/`-github` skill except `brief-pending-gates-*`, which just wraps `sdlc_status`), wrapping `bin/cadre sdlc` the same way the lifecycle plugins' skills already do for Claude Code/Codex. 10 of the 16 forge-specific tools wrap kernel subcommands not present in every `agentic-sdlc` release within the declared compatibility range — see [`cline-lifecycle/README.md`](cline-lifecycle/README.md) for which. Requires the external `agentic-sdlc` kernel to be installed separately.
+- **`cline-agents`** (`cline-agents/` subdirectory) — actually dispatches subagents. See [`cline-agents/README.md`](cline-agents/README.md) for its full tool table and the SDK-embedding quick start it documents as its primary usage pattern.
+  - *Subagent lifecycle:* `start_subagent`, `message_subagent`, `get_subagent`
+  - *Preset/skill discovery:* `list_agent_presets` (71 bundled role presets), `list_skills`/`get_skill` (this repository's own bundled skills)
+  - *Orchestration:* `dispatch_selected_roles` — calls `bin/cadre select` and immediately dispatches every selected primary/reviewer role in one call, optionally retrieving knowledge-store context first
+  - *Handoffs:* `save_handoff`, `read_handoff`
+- **`cline-lifecycle`** (`cline-lifecycle/` subdirectory) — G1–G10 Agentic SDLC governance as 21 tool calls, wrapping `bin/cadre sdlc` the same way the lifecycle plugins' skills already do for Claude Code/Codex. Requires the external `agentic-sdlc` kernel to be installed separately. See [`cline-lifecycle/README.md`](cline-lifecycle/README.md) for the full tool table.
+  - *Forge-agnostic (5):* `sdlc_init`, `sdlc_validate`, `sdlc_plan`, `sdlc_status`, `sdlc_decide`
+  - *Forge-specific (16):* 7 GitLab, 7 GitHub, 2 shared — mirroring every `cadre-lifecycle-gitlab`/`-github` skill except `brief-pending-gates-*`, which just wraps `sdlc_status`. 10 of these 16 wrap kernel subcommands not present in every `agentic-sdlc` release within the declared compatibility range — see `cline-lifecycle/README.md` for which.
 
 ```sh
 # cadre: agents_select (plan-only)
@@ -289,7 +321,14 @@ python3 -m unittest discover -s plugins/lifecycle-gitlab/tools -p "test_*.py" -v
 
 ### Regenerating Assets
 
-**`cadre generate-plugin --output` is not safe to run directly against this repository.** The register (`deagy/cadre`) split its own downstream plugin distribution out into a separate repository at some point before this repository's pinned `cadre-ref.txt` revision — originally `deagy/cadre-plugin`, now archived and superseded by this repository — and its generator writes `README.md` from a template (`packaging/plugin-README.md`) describing a different, single-plugin `cadre`/`agentic-sdlc` structure with its own versioning and install instructions, not this repository's actual merged Cadre + Agentic SDLC + Cline identity split across 4 plugins. That template now names `deagy/cadre-lifecycle` as its own "this repository" row, since it was updated to point at the current successor, but its *structure* still describes the old single-plugin shape — the register has no concept of this repository's 4-plugin split at all.
+**`cadre generate-plugin --output` is not safe to run directly against this repository.** Its generator writes `README.md` from a template (`packaging/plugin-README.md`) describing a different, single-plugin `cadre`/`agentic-sdlc` structure with its own versioning and install instructions — not this repository's actual merged Cadre + Agentic SDLC + Cline identity split across 4 plugins. The register has no concept of this repository's 4-plugin split at all.
+
+<details>
+<summary>Why the template doesn't match this repository</summary>
+
+The register (`deagy/cadre`) split its own downstream plugin distribution out into a separate repository at some point before this repository's pinned `cadre-ref.txt` revision — originally `deagy/cadre-plugin`, now archived and superseded by this repository. That template now names `deagy/cadre-lifecycle` as its own "this repository" row, since it was updated to point at the current successor, but its *structure* still describes the old single-plugin shape.
+
+</details>
 
 Everything else the register generates (`skills/`, `agents/`, `codex-agents/`, `suite/`, `agent-catalog.json`, `bin/cadre`, `profiles/`, `extensions/`, and — as of the plugin split — `plugins/lifecycle/skills/`) is role/routing content, not repository-identity prose, so it stays correct. Hand-authored exceptions, never touched by regeneration:
 
