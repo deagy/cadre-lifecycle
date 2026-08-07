@@ -1,0 +1,148 @@
+name: drift-check
+
+# Periodically re-verifies that this repository's generated content still
+# matches what `cadre generate-plugin` would produce from the *currently
+# pinned* deagy/cadre revision in cadre-ref.txt -- catching drift from a
+# generated file being hand-edited directly here (bypassing "edit the
+# canonical source in deagy/cadre and regenerate") rather than from cadre's
+# own content moving forward.
+#
+# regenerate.yml already re-verifies content, but only against a *new*
+# cadre revision, triggered by cadre's own release -- it never revisits an
+# already-applied revision, so a direct hand-edit to a generated file here
+# (e.g. suite/AGENTS.md, provider.json, or a skills/ reference doc) produces
+# no signal there and silently persists until the next real regeneration
+# quietly reverts it. This workflow exists to catch that gap in between.
+#
+# Split into two jobs for the same reason as regenerate.yml: `check`
+# executes deagy/cadre's own code (at the exact revision already pinned
+# here) and only ever holds a read-only token, so a compromised/malicious
+# cadre revision can't use this workflow to open or write anything. `report`
+# never checks out or executes cadre's code -- it only opens or updates a
+# tracking issue from the diff `check` already produced, and is the only
+# job holding a write-scoped token.
+
+on:
+  schedule:
+    - cron: "0 13 * * 1" # every Monday
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      cadre_ref: ${{ steps.ref.outputs.value }}
+      drifted: ${{ steps.diff.outputs.drifted }}
+    steps:
+      - name: Checkout cadre-lifecycle
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Read the pinned cadre-ref.txt revision
+        id: ref
+        run: |
+          set -eu
+          ref=$(grep -v '^[[:space:]]*#' cadre-ref.txt | grep -v '^[[:space:]]*$' | head -1)
+          if [ -z "$ref" ]; then
+            echo "::error::cadre-ref.txt has no non-comment, non-blank revision line."
+            exit 1
+          fi
+          echo "value=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout cadre at the pinned revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          repository: deagy/cadre
+          ref: ${{ steps.ref.outputs.value }}
+          path: .regen/cadre
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.14"
+
+      - name: Generate into a scratch directory
+        # The one step that executes cadre's own code (bin/cadre
+        # generate-plugin, from the second repository checked out above) --
+        # this job never holds a write token, by design (see the
+        # workflow-level comment).
+        run: .regen/cadre/bin/cadre generate-plugin --output "$RUNNER_TEMP/cadre-lifecycle-regen"
+
+      - name: Apply generated content directly onto this checkout (README.md and hand-authored plugins excluded)
+        # Safe to apply straight onto the working tree here, unlike a local
+        # developer checkout: this runner is disposable, the job never
+        # pushes (contents: read only), and every step after this one only
+        # ever reads the result via `git status`/`git diff` before the
+        # runner is torn down.
+        run: python3 tools/apply_regeneration.py --generated "$RUNNER_TEMP/cadre-lifecycle-regen" --target .
+
+      - name: Port cline-agents/agents/ and cline-agents/skills/ from the just-applied content
+        run: python3 tools/port_cline_agents.py --root .
+
+      - name: Clean up scratch checkout
+        run: rm -rf .regen
+
+      - name: Check whether the applied content actually matches what's committed
+        id: diff
+        run: |
+          if git status --porcelain | grep -q .; then
+            echo "drifted=true" >> "$GITHUB_OUTPUT"
+            echo "Drift detected -- committed content differs from what regenerating at the pinned revision produces:"
+            git status --porcelain
+            git diff > "$RUNNER_TEMP/drift.patch"
+          else
+            echo "drifted=false" >> "$GITHUB_OUTPUT"
+            echo "No drift: committed content matches regeneration from the pinned revision."
+          fi
+
+      - name: Upload drift report
+        if: steps.diff.outputs.drifted == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: drift-report
+          path: ${{ runner.temp }}/drift.patch
+          retention-days: 30
+
+  report:
+    needs: check
+    if: needs.check.outputs.drifted == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      # No cadre checkout, no execution of cadre's code in this job -- only
+      # the fact that `check` found drift, plus its already-uploaded
+      # artifact, are used here, by the one job that holds a write-scoped
+      # token (issues: write) this workflow needs.
+      - name: Open or update a tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CADRE_REF: ${{ needs.check.outputs.cadre_ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -eu
+          title="Generated-content drift detected against cadre-ref.txt ($CADRE_REF)"
+          para1="Regenerating from the currently pinned \`deagy/cadre\` revision (\`$CADRE_REF\`) no longer matches what's committed here, beyond the documented hand-authored exceptions (README.md, plugin manifests/tools, plugins/lifecycle-github/, plugins/lifecycle-gitlab/)."
+          para2="This means a generated file was edited directly in this repository instead of at its canonical source in deagy/cadre, so it will be silently reverted the next time \`regenerate.yml\` actually runs, unless the same fix is ported upstream first."
+          para3="See the \`drift-report\` artifact on this run for the full diff: $RUN_URL"
+          para4="To resolve: port the intended change into deagy/cadre's canonical source (and open a PR there), then re-run this workflow (or wait for the next scheduled run) to confirm the drift clears. Do not just re-apply the diff here -- that would revert the fix instead of fixing the root cause."
+          body=$(printf '%s\n\n%s\n\n%s\n\n%s' "$para1" "$para2" "$para3" "$para4")
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"Generated-content drift detected\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
