@@ -1,6 +1,6 @@
 {
   "name": "cadre-lifecycle",
-  "version": "0.1.1",
+  "version": "0.3.0",
   "private": true,
   "description": "Combined Cadre role selection and Agentic SDLC lifecycle governance",
   "type": "module",

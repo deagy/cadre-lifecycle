@@ -372,3 +372,9 @@ See [Releases](https://github.com/deagy/cadre-lifecycle/releases) or [CHANGELOG.
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE) for details.
+
+## Examples
+
+See [docs/examples/](docs/examples/) for end-to-end workflow documentation:
+
+- [Plugin usage workflow](docs/examples/plugin-usage-workflow.md) — from project bootstrap through lifecycle governance
