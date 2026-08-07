@@ -15,6 +15,28 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.11.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.11.1) - 2026-08-07
+
+**Fixes the v0.11.0 migration notice, which never ran.**
+
+### Fixed
+
+- All four plugins declared `"hooks": "./hooks/hooks.json"` in their
+  manifests. That path is loaded automatically, and declaring it as well
+  makes Claude Code report `Duplicate hooks file detected` and skip the hook
+  entirely — so the `SessionStart` migration notice added in v0.11.0 was
+  inert for every user. The manifest field is for *additional* hook files
+  only; removing it is the fix. The hook file itself is unchanged.
+
+If you installed v0.11.0 and never saw a migration notice, this is why.
+Update to v0.11.1 and it will appear. The migration itself is unchanged:
+
+```text
+/plugin marketplace add deagy/cadre
+/plugin install cadre@cadre-team
+/plugin marketplace remove cadre-lifecycle-team
+```
+
 ## [0.11.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.11.0) - 2026-08-07
 
 **Final release. This repository is being archived.**

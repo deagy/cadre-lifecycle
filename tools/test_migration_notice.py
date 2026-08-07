@@ -79,12 +79,24 @@ class TestEveryPluginShipsTheNotice(unittest.TestCase):
             with self.subTest(plugin=str(plugin_root)):
                 self.assertTrue((REPO_ROOT / plugin_root / "hooks" / "hooks.json").is_file())
 
-    def test_each_manifest_declares_the_hook(self) -> None:
-        """An undeclared hooks.json is inert -- the release would do nothing."""
+    def test_no_manifest_declares_the_standard_hooks_path(self) -> None:
+        """This assertion was exactly backwards in v0.11.0, and that shipped.
+
+        `hooks/hooks.json` at the standard path is loaded automatically. Also
+        naming it in the manifest is not redundant-but-harmless: Claude Code
+        reports "Duplicate hooks file detected" and the hook does not load at
+        all. So v0.11.0's migration notice -- the entire point of that
+        release -- never ran for anyone. The manifest field is for
+        *additional* hook files only.
+        """
         for relative in MANIFESTS:
             with self.subTest(manifest=relative):
                 manifest = json.loads((REPO_ROOT / relative).read_text(encoding="utf-8"))
-                self.assertEqual("./hooks/hooks.json", manifest.get("hooks"))
+                self.assertNotIn(
+                    manifest.get("hooks"),
+                    ("./hooks/hooks.json", "hooks/hooks.json"),
+                    "remove the `hooks` field; the standard path loads automatically",
+                )
 
     def test_all_four_copies_are_identical(self) -> None:
         commands = {str(root): _hook_command(root) for root in PLUGIN_ROOTS}
