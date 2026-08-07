@@ -3,19 +3,35 @@ set -eu
 BIN_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PLUGIN_ROOT=$(CDPATH= cd -- "$BIN_DIR/.." && pwd)
 SUITE_ROOT="$PLUGIN_ROOT/suite"
+if [ "${1:-}" = "--interactive" ]; then
+  CADRE_INTERACTIVE=1
+  export CADRE_INTERACTIVE
+  shift
+fi
 command_name="${1:-help}"
 [ "$#" -gt 0 ] && shift || true
+detect_agent_python() {
+  AGENT_PYTHON=
+  for candidate in python3 python; do
+    command -v "$candidate" >/dev/null 2>&1 || continue
+    if "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then AGENT_PYTHON="$candidate"; break; fi
+  done
+}
 if [ "$command_name" = "sdlc" ]; then
   sdlc_bin="${AGENTIC_SDLC_BIN:-}"
-  if [ -z "$sdlc_bin" ]; then sdlc_bin=$(command -v agentic-sdlc || true); fi
+  if [ -z "$sdlc_bin" ]; then
+    detect_agent_python
+    if [ -n "$AGENT_PYTHON" ]; then
+      sdlc_bin=$("$AGENT_PYTHON" "$SUITE_ROOT/roster/shared/src/settings.py" resolve agentic_sdlc.bin_path) || exit 1
+    else
+      echo "cadre: no Python 3.10+ found; falling back to PATH for agentic-sdlc without reading any cadre config file (a configured agentic_sdlc.bin_path, if set, is being ignored)" >&2
+      sdlc_bin=$(command -v agentic-sdlc || true)
+    fi
+  fi
   [ -n "$sdlc_bin" ] || { echo "cadre: install Agentic SDLC v0.3.x from https://github.com/deagy/agentic-sdlc" >&2; exit 1; }
   exec "$sdlc_bin" --provider "$PLUGIN_ROOT/provider.json" "$@"
 fi
-AGENT_PYTHON=
-for candidate in python3 python; do
-  command -v "$candidate" >/dev/null 2>&1 || continue
-  if "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then AGENT_PYTHON="$candidate"; break; fi
-done
+detect_agent_python
 [ -n "$AGENT_PYTHON" ] || { echo "cadre: Python 3.10+ is required" >&2; exit 1; }
 case "$command_name" in
   select) exec "$AGENT_PYTHON" "$SUITE_ROOT/roster/orchestration/src/select_agents.py" "$@" ;;
@@ -27,6 +43,7 @@ case "$command_name" in
   init) exec "$AGENT_PYTHON" "$SUITE_ROOT/roster/shared/src/init_project.py" "$@" ;;
   profile) exec "$AGENT_PYTHON" "$SUITE_ROOT/roster/orchestration/src/profile_diff.py" "$@" ;;
   gitlab-evidence) exec "$AGENT_PYTHON" "$SUITE_ROOT/roster/orchestration/mcp/gitlab_cli.py" "$@" ;;
-  help|-h|--help) echo "Usage: cadre {select|selection-telemetry|knowledge|bootstrap-codex|resolve-shared|mcp-dispatch-server|init|profile|gitlab-evidence|sdlc} [args...]" ;;
+  config) exec "$AGENT_PYTHON" "$SUITE_ROOT/roster/shared/src/settings.py" "$@" ;;
+  help|-h|--help) echo "Usage: cadre [--interactive] {select|selection-telemetry|knowledge|bootstrap-codex|resolve-shared|mcp-dispatch-server|init|profile|gitlab-evidence|config|sdlc} [args...]" ;;
   *) echo "cadre: unknown subcommand $command_name" >&2; exit 1 ;;
 esac
