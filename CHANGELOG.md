@@ -15,6 +15,12 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [Unreleased]
+
+### Fixed
+
+- **`regenerate.yml` silently dropped every file a cadre release newly added, shipping a broken package.** The workflow built its patch artifact with a plain `git diff --binary`, which reports only *tracked* files — so a regeneration that both modified existing files and added new ones produced a patch containing only the modifications. Nothing failed: the `changed` check one step earlier uses `git status --porcelain`, which *does* see untracked files, so the workflow correctly decided there was something to ship and then shipped a truncated patch; and `validate.yml` does not run automatically on a PR opened with the default `GITHUB_TOKEN`, so CI was silent too. Found in the cadre v0.15.0 regeneration (PR #45), which updated six suite modules and `bin/cadre` to import `roster/shared/src/settings.py` while omitting that module entirely — `cadre select` and `cadre config` in that package died with `ModuleNotFoundError`. The patch is now taken from the index (`git add -A` then `git diff --cached --binary`), which also propagates deletions of generated files. New `tools/test_regenerate_workflow.py` pins both the workflow text and the underlying git behavior that makes staging necessary.
+
 ## [0.9.8](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.8) - 2026-08-06
 
 ### Added
