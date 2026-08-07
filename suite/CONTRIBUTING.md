@@ -41,10 +41,9 @@ understand scope -> make a focused change -> run relevant checks
 -> open a GitHub pull request -> obtain independent review -> merge
 ```
 
-Do not commit or push secrets, raw chat exports, real documents, credentials,
-databases, object data, OpenTofu/Terraform state, rendered secrets, or generated
-credentials. Do not make persistent-environment or production changes as part
-of repository validation.
+Do not commit or push any of the prohibited content listed in
+[AGENTS.md Safety Model](../AGENTS.md#safety-model). Do not make
+persistent-environment or production changes as part of repository validation.
 
 ## Documentation changes
 

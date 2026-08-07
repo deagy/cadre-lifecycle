@@ -71,7 +71,7 @@ Prefer the Go libraries and tools in `suite/roster/shared/library-standards.yaml
 
 Use short imperative commit subjects and focused changes. Describe scope, security implications, validation, affected decisions, and linked issues.
 
-Never commit secrets, raw chat exports, real documents, local environment files, databases, object data, generated credentials, OpenTofu/Terraform state, or rendered secrets. Preserve independent review and human gates for persistent mutations, production, risk acceptance, and release.
+See [Safety Model](#safety-model) for the prohibited-content list. Preserve independent review and human gates for persistent mutations, production, risk acceptance, and release.
 
 ## Agentic SDLC Boundary
 
