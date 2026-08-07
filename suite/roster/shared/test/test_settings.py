@@ -153,6 +153,89 @@ class EmptyEnvVarTests(SettingsTestCase):
             )
 
 
+class ProjectTierAnchorTests(SettingsTestCase):
+    """`start=` anchors the project tier; without it the tier is discovered
+    by walking up from cwd, which is only meaningful for a CLI a human ran
+    inside a project. A long-lived, project-agnostic process (an stdio MCP
+    server) has an incidental cwd, and resolving from it lets an unrelated
+    checkout's `.agents/cadre.yaml` steer a call it has nothing to do with.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.addCleanup(
+            setattr, settings, "_PROJECT_TIER_CWD_FALLBACK_DISABLED", False
+        )
+
+    def test_explicit_start_anchors_the_project_tier_regardless_of_cwd(self) -> None:
+        _write_project_config(
+            self.project_dir, "gitlab:\n  supports_work_item_hierarchy: true\n"
+        )
+        elsewhere = Path(tempfile.mkdtemp(prefix="cadre-settings-elsewhere-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(elsewhere, ignore_errors=True))
+        with mock.patch.object(settings.Path, "cwd", return_value=elsewhere):
+            value = settings.resolve_setting(
+                "gitlab.supports_work_item_hierarchy", start=self.project_dir, env={}
+            )
+        self.assertIs(value, True)
+
+    def test_without_start_the_cwd_decides_which_project_is_read(self) -> None:
+        # Documents the behavior that makes the opt-out below necessary:
+        # an unrelated directory's config is what gets picked up.
+        _write_project_config(
+            self.project_dir, "gitlab:\n  supports_work_item_hierarchy: true\n"
+        )
+        with mock.patch.object(settings.Path, "cwd", return_value=self.project_dir):
+            settings.reset_cache()
+            value = settings.resolve_setting(
+                "gitlab.supports_work_item_hierarchy", start=None, env={}
+            )
+        self.assertIs(value, True)
+
+    def test_disabling_the_cwd_fallback_skips_the_project_tier(self) -> None:
+        _write_project_config(
+            self.project_dir, "gitlab:\n  supports_work_item_hierarchy: true\n"
+        )
+        settings.disable_project_tier_cwd_fallback()
+        with mock.patch.object(settings.Path, "cwd", return_value=self.project_dir):
+            settings.reset_cache()
+            value = settings.resolve_setting(
+                "gitlab.supports_work_item_hierarchy", start=None, env={}
+            )
+        # Falls through to the field default rather than the cwd's project.
+        self.assertIsNone(value)
+
+    def test_explicit_start_still_honored_after_disabling_the_cwd_fallback(self) -> None:
+        # The opt-out suppresses only the *implicit* anchor. A caller that
+        # supplies a validated project root on purpose (dispatch_core's
+        # project_root) must still resolve against it.
+        _write_project_config(
+            self.project_dir, "gitlab:\n  supports_work_item_hierarchy: true\n"
+        )
+        settings.disable_project_tier_cwd_fallback()
+        settings.reset_cache()
+        value = settings.resolve_setting(
+            "gitlab.supports_work_item_hierarchy", start=self.project_dir, env={}
+        )
+        self.assertIs(value, True)
+
+    def test_scope_violation_still_raises_through_an_explicit_start(self) -> None:
+        _write_project_config(self.project_dir, 'gitlab:\n  base_url: "https://evil.example.com"\n')
+        settings.disable_project_tier_cwd_fallback()
+        settings.reset_cache()
+        with self.assertRaises(settings.SettingsScopeError):
+            settings.resolve_setting("gitlab.base_url", start=self.project_dir, env={})
+
+    def test_failure_message_does_not_name_a_cwd_path_when_the_tier_is_skipped(self) -> None:
+        settings.disable_project_tier_cwd_fallback()
+        settings.reset_cache()
+        with self.assertRaises(settings.SettingsError) as ctx:
+            settings.resolve_setting("gitlab.base_url", start=None, env={})
+        message = str(ctx.exception)
+        self.assertIn("not consulted", message)
+        self.assertNotIn(".agents/cadre.yaml", message)
+
+
 class GlobalOnlyScopeTests(SettingsTestCase):
     def test_project_local_file_setting_a_global_only_field_is_rejected(self) -> None:
         _write_project_config(self.project_dir, 'gitlab:\n  base_url: "https://evil.example.com"\n')
@@ -233,6 +316,31 @@ class SecretShapedKeyTests(SettingsTestCase):
                 settings.reset_cache()
                 with self.assertRaises(settings.SettingsError):
                     settings.resolve_setting("gitlab.project_id", start=project, env={})
+
+    def test_secret_shaped_key_nested_under_a_list_is_rejected(self) -> None:
+        # The scan used to walk dicts only. No registered field is
+        # list-shaped, so such a key could never be *resolved* -- but
+        # write_setting's "preserve unknown keys" merge would round-trip it
+        # into every later rewrite, silently persisting a pasted credential
+        # this module promises is never stored.
+        _write_project_config(
+            self.project_dir,
+            'gitlab:\n  extra:\n    - name: "a"\n      token: "glpat-nested-secret"\n',
+        )
+        with self.assertRaises(settings.SettingsError) as ctx:
+            settings.resolve_setting("gitlab.supports_work_item_hierarchy", start=self.project_dir, env={})
+        message = str(ctx.exception)
+        self.assertIn("token", message)
+        self.assertNotIn("glpat-nested-secret", message)
+
+    def test_secret_shaped_key_deeper_in_a_list_of_lists_is_rejected(self) -> None:
+        _write_project_config(
+            self.project_dir,
+            'gitlab:\n  extra:\n    - - api_key: "sk-deeply-nested"\n',
+        )
+        with self.assertRaises(settings.SettingsError) as ctx:
+            settings.resolve_setting("gitlab.supports_work_item_hierarchy", start=self.project_dir, env={})
+        self.assertNotIn("sk-deeply-nested", str(ctx.exception))
 
 
 class TristateHierarchyFlagTests(SettingsTestCase):
@@ -359,6 +467,54 @@ class YamlScalarHazardTests(SettingsTestCase):
         settings.reset_cache()
         value = settings.resolve_setting("runners.claude_bin", start=self.project_dir, env={})
         self.assertEqual(value, "my-claude")
+
+    def test_leading_dash_executable_is_rejected(self) -> None:
+        # Verified under bash: `bin="-a"; exec "$bin" --provider p.json ...`
+        # makes exec consume `--provider` as -a's argv[0] argument and then
+        # try to execute p.json -- an inert-looking value silently
+        # reinterprets the rest of the command line. The packaged wrapper is
+        # `#!/bin/sh`, which is bash on some systems.
+        for candidate in ("-a", "-c", "--login"):
+            with self.subTest(candidate=candidate):
+                with self.assertRaises(settings.SettingsError) as ctx:
+                    settings.resolve_setting(
+                        "runners.claude_bin",
+                        start=self.project_dir,
+                        env={"SECURE_CLOUD_AGENTS_CLAUDE_BIN": candidate},
+                    )
+                self.assertIn("must not begin with '-'", str(ctx.exception))
+
+    def test_control_characters_in_an_executable_are_rejected(self) -> None:
+        # A newline would break `cadre config resolve`'s contract of one
+        # value on stdout, which the packaged wrapper captures with $(...).
+        for candidate in ("clau\nde", "clau\tde", "clau\x00de"):
+            with self.subTest(candidate=candidate):
+                with self.assertRaises(settings.SettingsError) as ctx:
+                    settings.resolve_setting(
+                        "runners.claude_bin",
+                        start=self.project_dir,
+                        env={"SECURE_CLOUD_AGENTS_CLAUDE_BIN": candidate},
+                    )
+                self.assertIn("control characters", str(ctx.exception))
+
+    def test_internal_spaces_in_a_path_are_still_accepted(self) -> None:
+        # Deliberately legal: real installs live under paths with spaces,
+        # and every consumer quotes the value.
+        value = settings.resolve_setting(
+            "runners.claude_bin",
+            start=self.project_dir,
+            env={"SECURE_CLOUD_AGENTS_CLAUDE_BIN": "/opt/My Tools/bin/claude"},
+        )
+        self.assertEqual(value, "/opt/My Tools/bin/claude")
+
+    def test_control_characters_in_a_path_field_are_rejected(self) -> None:
+        with self.assertRaises(settings.SettingsError) as ctx:
+            settings.resolve_setting(
+                "knowledge_store.home",
+                start=self.project_dir,
+                env={"KNOWLEDGE_STORE_HOME": "/tmp/store\nwith-newline"},
+            )
+        self.assertIn("control characters", str(ctx.exception))
 
 
 class MissingPyYamlAndDualFileTests(SettingsTestCase):
