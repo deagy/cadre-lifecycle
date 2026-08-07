@@ -26,8 +26,9 @@ Every role's metadata (`phase`, `capability`, `model`, `codex_model`,
 and the `agent-authoring` skill). `roster/catalog.yaml` and
 `roster/orchestration/routing.yaml`'s `knowledge_focus` block are purely
 generated output derived from that frontmatter -- never hand-edit them.
-Edit a role's frontmatter, then regenerate both files with
-`cadre generate-role-metadata` (`... --check` to validate without writing).
+Edit a role's frontmatter, then regenerate `roster/catalog.yaml` and
+`roster/orchestration/routing.yaml` with `cadre generate-role-metadata`
+(`... --check` to validate without writing).
 
 This repository's own catalog/plugin feature and roadmap work is tracked
 through GitHub Issues/PRs for discussion and triage; this repository does not
