@@ -768,19 +768,30 @@ async function runCadreSdlc(args: string[], rootPath: string): Promise<Record<st
 // source: both print the full JSON result to stdout, then `return 2`). Exit 1
 // is reserved for a genuine structural failure in all four (MR/PR not found,
 // identity mismatch, malformed request) -- with one caveat found in review:
-// a *concurrent* plan-digest mismatch mid-`--apply` also exits 2, but that
-// specific path raises `GateIssuesBlocked`, which the kernel prints only as
-// a prose `{"error": "..."}` on stderr, not the full structured result --
-// so this helper's `err.stdout` is empty there and it falls through to the
-// same generic error shape a real exit-1 would produce (still safe: no
-// false success, no crash, just a less-structured message than the
-// ordinary refusals-on-a-completed-run case gets). Plain `runCadreSdlc`
-// would discard a real exit-2 report's stdout -- including, for the two
-// create-issues commands, the `plan_digest` a subsequent `apply: true` call
-// needs, and, in the ordinary (non-concurrent-mismatch) case, confirmation
-// of what was already created -- and misreport it as an opaque error; this
-// variant parses `err.stdout` as JSON first and only falls back to the
-// generic error shape if that fails.
+// for the two create-issues commands, *any* `GateIssuesBlocked`/
+// `GateIssuesGithubBlocked`-raising failure during `--apply` also exits 2
+// but does NOT get the full structured result -- this is not limited to a
+// concurrent plan-digest mismatch (the case an earlier round of this same
+// review singled out); tracing `gate_issues.py`/`gate_issues_github.py`
+// directly turns up at least: an ambiguous label match, a matched issue
+// missing its own anchor label or carrying a foreign one, an author-identity
+// mismatch on a matched issue, post-creation verification failure, an
+// unresolvable/ambiguous username during `--reconcile-assignees`, the
+// GitLab Issue Links API being unavailable, a held ledger lock, and the
+// *initial* (non-concurrent) plan-digest mismatch too -- every one of these
+// prints only `{"error": "<message>"}` to stderr (still JSON, just not the
+// full result payload -- not literally "prose"), never `gate_results`/
+// `approval_results`/`plan_digest`. This helper's `err.stdout` is empty in
+// all of these cases, so it falls through to the same generic error shape a
+// real exit-1 would produce -- still safe (no false success, no crash),
+// just less structured than the ordinary refusals-on-a-completed-run case
+// gets. Plain `runCadreSdlc` would discard a real exit-2 report's stdout --
+// including, for the two create-issues commands, the `plan_digest` a
+// subsequent `apply: true` call needs, and, in the ordinary
+// (no-GateIssuesBlocked-raised) case, confirmation of what was already
+// created -- and misreport it as an opaque error; this variant parses
+// `err.stdout` as JSON first and only falls back to the generic error shape
+// if that fails.
 async function runCadreSdlcAllowingReportExitCodes(
   args: string[],
   rootPath: string,
@@ -846,6 +857,7 @@ export {
   buildCreateGithubGateIssuesArgs,
   buildRequestGateReviewersGitlabArgs,
   buildRequestGateReviewersGithubArgs,
+  runCadreSdlcAllowingReportExitCodes,
 };
 
 const setup = (api: SetupApi, ctx: SetupContext) => {

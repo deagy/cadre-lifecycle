@@ -130,15 +130,26 @@ jobs:
       # and bootstrap_sdlc.py's own read_kernel_compatibility() do for the
       # same field elsewhere in this repo -- fail closed on anything else
       # (found in review of PR #34) rather than let an arbitrary string flow
-      # into `git+...@v<string>`.
+      # into `git+...@v<string>`. Validation and extraction happen in one
+      # Python invocation using re.fullmatch (whole-string by construction,
+      # no re.MULTILINE), not a separate `echo "$value" | grep -E '^...$'`
+      # step -- `grep` (without `-z`) matches per *line*, so a value
+      # containing an embedded newline (a legal JSON string, e.g.
+      # `"0.13.0\nanything"`, which `json.load` turns into a real newline in
+      # the shell variable) could pass a piped grep check on its matching
+      # line while the *whole* unsanitized value still reached `pip
+      # install` -- found in a follow-up review of the first fix.
       - name: Install the pinned Agentic SDLC kernel
         run: |
           set -eu
-          minimum=$(python3 -c "import json; print(json.load(open('provider.json'))['kernel_compatibility']['minimum'])")
-          echo "$minimum" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || {
-            echo "::error::provider.json kernel_compatibility.minimum ('$minimum') is not MAJOR.MINOR.PATCH semver" >&2
-            exit 1
-          }
+          minimum=$(python3 -c '
+          import json, re, sys
+          value = json.load(open("provider.json"))["kernel_compatibility"]["minimum"]
+          if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", value):
+              print(f"::error::provider.json kernel_compatibility.minimum ({value!r}) is not MAJOR.MINOR.PATCH semver", file=sys.stderr)
+              raise SystemExit(1)
+          print(value)
+          ')
           pip install --user "git+https://github.com/deagy/agentic-sdlc.git@v${minimum}#subdirectory=plugins/agentic-sdlc"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       # package.json declares npm workspaces (cline, cline-agents,

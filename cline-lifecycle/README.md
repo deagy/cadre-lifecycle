@@ -159,19 +159,28 @@ non-failure reports, not something to retry, and all four tools return that
 report's JSON normally either way, including (for the two create-gate-issues
 tools) the `plan_digest` a subsequent `apply: true` call needs and, in
 `--apply` mode, confirmation of any issue that was already created before the
-refusal was hit — except for a concurrent plan-digest-mismatch mid-`--apply`
-(also exit 2), which the kernel reports as a prose error rather than the
-full structured result, so that specific case surfaces the same way a
-structural failure would. Only a genuine structural failure (exit 1: MR/PR
+refusal was hit — except for any `GateIssuesBlocked`/`GateIssuesGithubBlocked`
+failure during `--apply` (also exit 2; not limited to a concurrent
+plan-digest mismatch — ambiguous label matches, identity mismatches, a held
+lock, and several other cases all raise it too), which the kernel reports as
+a bare `{"error": "..."}` rather than the full structured result, so those
+specific cases surface the same way a structural failure would. Only a
+genuine structural failure (exit 1: MR/PR
 not found or closed, an identity mismatch, a malformed request) is expected
 to surface as any of the four tools' `error` field otherwise.
 
 ## Behavioral detail
 
 See [`index.test.mts`](index.test.mts) for the authoritative behavior: tool
-registration, real `bin/cadre sdlc` subprocess outcomes (structured errors for
-an un-onboarded project or a nonexistent task, a real dry-run preview for
-`sdlc_init`), and the missing-root failure mode.
+registration, argument construction (kernel-free), real `bin/cadre sdlc`
+subprocess outcomes (structured errors for an un-onboarded project or a
+nonexistent task, a real dry-run preview for `sdlc_init`), and the
+missing-root failure mode. [`index.exitcode.test.mts`](index.exitcode.test.mts)
+is a separate file specifically for `runCadreSdlcAllowingReportExitCodes`'s
+exit-code-branching behavior — it mocks `node:child_process` at module level
+(to deterministically exercise the exit-2-with-JSON-on-stdout path a live
+kernel call can't reliably reproduce), so it can't share a file with
+`index.test.mts`'s real, unmocked subprocess tests.
 
 ## Development
 
