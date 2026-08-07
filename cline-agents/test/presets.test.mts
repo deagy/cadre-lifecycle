@@ -47,6 +47,8 @@ const READ_ONLY_SAMPLE = [
 
 const WRITE_OR_EXEC_TOOL_NAMES = new Set(["run_commands", "editor", "apply_patch"]);
 
+type RegisteredRule = Parameters<SetupApi["registerRule"]>[0];
+
 async function registerTools(workspaceRootPath: string | undefined) {
   const tools: AgentTool[] = [];
   const api: SetupApi = {
@@ -67,6 +69,29 @@ async function registerTools(workspaceRootPath: string | undefined) {
   return tools;
 }
 
+// Separate from registerTools() above (used pervasively throughout this
+// file for tool-surface assertions) so that adding rule capture doesn't
+// require touching every existing call site.
+async function registerRules(workspaceRootPath: string | undefined) {
+  const rules: RegisteredRule[] = [];
+  const api: SetupApi = {
+    registerTool: () => {},
+    registerCommand: () => {},
+    registerRule: (rule: RegisteredRule) => {
+      rules.push(rule);
+    },
+    registerMessageBuilder: () => {},
+    registerProvider: () => {},
+    registerAutomationEventType: () => {},
+    registerMcpServer: () => {},
+  };
+  const ctx: SetupContext = {
+    workspaceInfo: workspaceRootPath ? { rootPath: workspaceRootPath } : undefined,
+  };
+  await plugin.setup?.(api, ctx);
+  return rules;
+}
+
 function findTool(tools: AgentTool[], name: string): AgentTool {
   const tool = tools.find((t) => t.name === name);
   if (!tool) throw new Error(`tool ${name} was not registered`);
@@ -76,8 +101,8 @@ function findTool(tools: AgentTool[], name: string): AgentTool {
 const FAKE_TOOL_CTX = {} as AgentToolContext;
 
 describe("cline-agents plugin manifest", () => {
-  it("declares the tools capability and registers the expected tool surface", async () => {
-    expect(plugin.manifest.capabilities).toEqual(["tools"]);
+  it("declares the tools and rules capabilities and registers the expected tool surface", async () => {
+    expect(plugin.manifest.capabilities).toEqual(["tools", "rules"]);
     const tools = await registerTools(REPO_ROOT);
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -96,6 +121,17 @@ describe("cline-agents plugin manifest", () => {
         "write_wiki_page",
       ].sort(),
     );
+  });
+
+  it("registers a system-prompt rule via the real registerRule injection point", async () => {
+    const rules = await registerRules(REPO_ROOT);
+    expect(rules).toHaveLength(1);
+    const [rule] = rules;
+    expect(rule.id).toBe("cline-agents-system-prompt");
+    const content = typeof rule.content === "function" ? await rule.content() : rule.content;
+    expect(content).toContain("You are a coding assistant with access to Cadre role subagents.");
+    expect(content).toMatch(/dispatch_selected_roles/);
+    expect(content).toMatch(/start_subagent/);
   });
 });
 

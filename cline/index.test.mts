@@ -19,14 +19,19 @@ const PLUGIN_DIR = path.dirname(fileURLToPath(import.meta.url));
 // discovery path that would otherwise hit the workspace root's git state.
 const REPO_ROOT = path.resolve(PLUGIN_DIR, "..");
 
-async function registerTools(workspaceRootPath: string | undefined) {
+type RegisteredRule = Parameters<SetupApi["registerRule"]>[0];
+
+async function registerContributions(workspaceRootPath: string | undefined) {
   const tools: AgentTool[] = [];
+  const rules: RegisteredRule[] = [];
   const api: SetupApi = {
     registerTool: (tool: AgentTool) => {
       tools.push(tool);
     },
     registerCommand: () => {},
-    registerRule: () => {},
+    registerRule: (rule: RegisteredRule) => {
+      rules.push(rule);
+    },
     registerMessageBuilder: () => {},
     registerProvider: () => {},
     registerAutomationEventType: () => {},
@@ -36,7 +41,11 @@ async function registerTools(workspaceRootPath: string | undefined) {
     workspaceInfo: workspaceRootPath ? { rootPath: workspaceRootPath } : undefined,
   };
   await plugin.setup?.(api, ctx);
-  return tools;
+  return { tools, rules };
+}
+
+async function registerTools(workspaceRootPath: string | undefined) {
+  return (await registerContributions(workspaceRootPath)).tools;
 }
 
 function findTool(tools: AgentTool[], name: string): AgentTool {
@@ -46,10 +55,10 @@ function findTool(tools: AgentTool[], name: string): AgentTool {
 }
 
 describe("cadre plugin", () => {
-  it("declares the tools capability and registers exactly one tool: agents_select", async () => {
-    expect(plugin.manifest.capabilities).toEqual(["tools"]);
+  it("declares the tools and rules capabilities and registers exactly one tool: agents_select", async () => {
+    expect(plugin.manifest.capabilities).toEqual(["tools", "rules"]);
 
-    const tools = await registerTools(REPO_ROOT);
+    const { tools } = await registerContributions(REPO_ROOT);
     expect(tools.map((t) => t.name)).toEqual(["agents_select"]);
     expect(tools[0].description).toMatch(/plan only/i);
     expect(tools[0].description).toMatch(/never invokes agents/i);
@@ -60,6 +69,16 @@ describe("cadre plugin", () => {
     // dispatches anything.
     expect(tools[0].description).toMatch(/cannot.*dispatch/i);
     expect(tools[0].description).toMatch(/runner-adapters\.md/);
+  });
+
+  it("registers a system-prompt rule via the real registerRule injection point", async () => {
+    const { rules } = await registerContributions(REPO_ROOT);
+    expect(rules).toHaveLength(1);
+    const [rule] = rules;
+    expect(rule.id).toBe("cadre-system-prompt");
+    const content = typeof rule.content === "function" ? await rule.content() : rule.content;
+    expect(content).toContain("You are a coding assistant with access to Cadre role subagents.");
+    expect(content).toMatch(/agents_select/);
   });
 
   it("agents_select returns a real dispatch plan for this repository", async () => {

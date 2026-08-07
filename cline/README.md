@@ -67,6 +67,32 @@ orchestrating Cline session must dispatch manually — see the "## Cline" sectio
 [`../skills/run-agent-orchestration/references/runner-adapters.md`](../skills/run-agent-orchestration/references/runner-adapters.md)
 for the current manual-injection workaround and `/team` limitations.
 
+## System prompt
+
+This plugin registers a rule (`api.registerRule`, the "rules" capability
+declared in [`index.ts`](index.ts)'s manifest and
+[`package.json`](package.json)'s `cline.plugins[0].capabilities`) whose
+content is appended to the session's composed system prompt automatically —
+no host-application configuration required. `registerRule` is a genuine,
+plugin-controlled system-prompt injection point, confirmed by reading
+`@cline/shared`'s `AgentExtensionApi.registerRule` type declaration
+("Register prompt rules included in the runtime system prompt") and
+`@cline/core`'s compiled `SessionRuntime.composeSystemPrompt()`, which joins
+the host's own `config.systemPrompt` (if any) with every registered rule's
+content, in that order. This is distinct from — and additive to — a host
+application's own `systemPrompt` field on `ClineCore.create()`/
+`cline.start()`, which a Cline plugin cannot set itself (see
+[`../skills/run-agent-orchestration/references/runner-adapters.md`](../skills/run-agent-orchestration/references/runner-adapters.md)'s
+"## Cline" section, "Why a plugin can't dispatch," for the fuller picture of
+what a plugin's `setup(api, ctx)` can and cannot reach).
+
+The registered content begins with the exact sentence
+`"You are a coding assistant with access to Cadre role subagents."` and adds
+one clause naming `agents_select` and its plan-only scope. A host
+application may still set its own `systemPrompt` for a different framing —
+the two compose rather than conflict — but nothing further is required for
+this identity sentence to reach the model once this plugin is installed.
+
 ## Behavioral detail
 
 See [`index.test.mts`](index.test.mts) for the authoritative behavior: tool

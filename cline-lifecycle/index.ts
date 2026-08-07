@@ -881,6 +881,25 @@ export {
 const setup = (api: SetupApi, ctx: SetupContext) => {
   const rootPath = ctx.workspaceInfo?.rootPath;
 
+  // Real, plugin-controlled system-prompt injection -- see cline/index.ts's
+  // equivalent registerRule call for the confirmation this is a genuine
+  // runtime-system-prompt contribution, not host-application config. Scoped
+  // to this plugin's own lifecycle-governance tools so a session with
+  // `cline` and/or `cline-agents` also installed composes an addendum
+  // rather than repeating the base sentence unchanged.
+  api.registerRule({
+    id: "cline-lifecycle-system-prompt",
+    content:
+      "You are a coding assistant with access to Cadre role subagents. " +
+      "This session also has Agentic SDLC G1-G10 lifecycle governance available via the `sdlc_*` tool " +
+      "calls (`sdlc_init`, `sdlc_validate`, `sdlc_plan`, `sdlc_status`, `sdlc_decide`, plus GitHub- and " +
+      "GitLab-specific gate-review/reviewer-nudge/gate-status tools) -- use them for lifecycle gate " +
+      "tracking and decisions instead of asking a human to run `bin/cadre sdlc` by hand. Never approve " +
+      "or decide a gate you prepared evidence for yourself; separation of duties is enforced by the " +
+      "external Agentic SDLC kernel these tools call, not by this plugin.",
+    source: "cline-lifecycle",
+  });
+
   function requireRootPath(explicitRoot: string | undefined): string {
     const resolved = explicitRoot ?? rootPath;
     if (!resolved) {
@@ -1289,7 +1308,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
 
 const plugin: AgentPlugin = {
   name: "cadre-lifecycle",
-  manifest: { capabilities: ["tools"] },
+  manifest: { capabilities: ["tools", "rules"] },
   setup,
 };
 

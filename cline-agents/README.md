@@ -66,6 +66,30 @@ await cline.start({
 Pass this plugin's **directory** as the path. The loader reads `package.json`
 and discovers the entry point from the `cline.plugins` field.
 
+The `systemPrompt` shown above is host-application config — set by whatever
+calls `ClineCore.create()`/`cline.start()`, not by this plugin itself (a
+Cline plugin's `setup(api, ctx)` has no field for that). It is shown here as
+the recommended value because it is still worth setting explicitly: it is
+what actually establishes the model's framing before its first turn, whereas
+this plugin's own registered rule (below) only *appends* additional content
+once a run starts composing its system prompt. Installing this plugin does
+not require setting it, though — see "System prompt" below.
+
+## System prompt
+
+This plugin also registers a rule (`api.registerRule`, the "rules"
+capability declared in [`index.ts`](index.ts)'s manifest and
+[`package.json`](package.json)'s `cline.plugins[0].capabilities`) whose
+content is appended to the session's composed system prompt automatically,
+independent of whether a host sets `systemPrompt` as shown above.
+`registerRule` is a genuine, plugin-controlled injection point — see
+[`../cline/README.md`](../cline/README.md)'s "System prompt" section for the
+`@cline/core`/`@cline/shared` source confirming this, which applies
+identically here. The registered content begins with the exact sentence
+`"You are a coding assistant with access to Cadre role subagents."` and adds
+a clause naming `dispatch_selected_roles`/`start_subagent` and the
+discovery tools (`list_agent_presets`/`list_skills`).
+
 ## Tools
 
 | Tool | Purpose |

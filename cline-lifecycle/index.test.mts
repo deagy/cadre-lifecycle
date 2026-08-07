@@ -24,6 +24,8 @@ const PLUGIN_DIR = path.dirname(fileURLToPath(import.meta.url));
 // child, matching index.ts's own PLUGIN_DIR/CADRE_BIN resolution.
 const REPO_ROOT = path.resolve(PLUGIN_DIR, "..");
 
+type RegisteredRule = Parameters<SetupApi["registerRule"]>[0];
+
 async function registerTools(workspaceRootPath: string | undefined) {
   const tools: AgentTool[] = [];
   const api: SetupApi = {
@@ -42,6 +44,29 @@ async function registerTools(workspaceRootPath: string | undefined) {
   };
   await plugin.setup?.(api, ctx);
   return tools;
+}
+
+// Separate from registerTools() above (used pervasively throughout this
+// file for tool-surface assertions) so that adding rule capture doesn't
+// require touching every existing call site.
+async function registerRules(workspaceRootPath: string | undefined) {
+  const rules: RegisteredRule[] = [];
+  const api: SetupApi = {
+    registerTool: () => {},
+    registerCommand: () => {},
+    registerRule: (rule: RegisteredRule) => {
+      rules.push(rule);
+    },
+    registerMessageBuilder: () => {},
+    registerProvider: () => {},
+    registerAutomationEventType: () => {},
+    registerMcpServer: () => {},
+  };
+  const ctx: SetupContext = {
+    workspaceInfo: workspaceRootPath ? { rootPath: workspaceRootPath } : undefined,
+  };
+  await plugin.setup?.(api, ctx);
+  return rules;
 }
 
 function findTool(tools: AgentTool[], name: string): AgentTool {
@@ -80,8 +105,8 @@ const UNSHIPPED_KERNEL_TOOL_NAMES = [
 ];
 
 describe("cadre-lifecycle plugin", () => {
-  it("declares the tools capability and registers exactly the 5 forge-agnostic sdlc tools plus the 6 forge-specific approval/link tools and the 10 gate-issues/status/reviewer tools", async () => {
-    expect(plugin.manifest.capabilities).toEqual(["tools"]);
+  it("declares the tools and rules capabilities and registers exactly the 5 forge-agnostic sdlc tools plus the 6 forge-specific approval/link tools and the 10 gate-issues/status/reviewer tools", async () => {
+    expect(plugin.manifest.capabilities).toEqual(["tools", "rules"]);
 
     const tools = await registerTools(REPO_ROOT);
     expect(tools.map((t) => t.name).sort()).toEqual(
@@ -96,6 +121,16 @@ describe("cadre-lifecycle plugin", () => {
         ...UNSHIPPED_KERNEL_TOOL_NAMES,
       ].sort(),
     );
+  });
+
+  it("registers a system-prompt rule via the real registerRule injection point", async () => {
+    const rules = await registerRules(REPO_ROOT);
+    expect(rules).toHaveLength(1);
+    const [rule] = rules;
+    expect(rule.id).toBe("cline-lifecycle-system-prompt");
+    const content = typeof rule.content === "function" ? await rule.content() : rule.content;
+    expect(content).toContain("You are a coding assistant with access to Cadre role subagents.");
+    expect(content).toMatch(/sdlc_/);
   });
 
   it("each tool's description names the bin/cadre sdlc subcommand it wraps", async () => {

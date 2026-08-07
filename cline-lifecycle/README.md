@@ -89,6 +89,32 @@ git clone https://github.com/deagy/cadre-lifecycle.git
 cline plugin install /path/to/cadre-lifecycle/cline-lifecycle --force
 ```
 
+## System prompt
+
+This plugin registers a rule (`api.registerRule`, the "rules" capability
+declared in [`index.ts`](index.ts)'s manifest and
+[`package.json`](package.json)'s `cline.plugins[0].capabilities`) whose
+content is appended to the session's composed system prompt automatically —
+no host-application configuration required. See
+[`../cline/README.md`](../cline/README.md)'s "System prompt" section for the
+`@cline/core`/`@cline/shared` source confirming `registerRule` is a genuine,
+plugin-controlled injection point, distinct from a host's own `systemPrompt`
+config field. The registered content begins with the exact sentence
+`"You are a coding assistant with access to Cadre role subagents."` and adds
+a clause naming the `sdlc_*` tool family and the separation-of-duties
+invariant the external Agentic SDLC kernel enforces (never approve/decide a
+gate this session prepared evidence for itself).
+
+If `cline`, `cline-agents`, and/or `cline-lifecycle` are all installed in
+the same session, each plugin registers its rule independently -- a plugin's
+`setup(api, ctx)` has no way to detect whether a sibling plugin is also
+loaded, so each one includes the full base sentence rather than risk
+omitting it when installed alone. A session with more than one of these
+plugins installed will therefore see the base sentence once per installed
+plugin (mildly redundant -- three short, clearly-scoped paragraphs, not one
+combined string) rather than a single deduplicated system prompt. See each
+plugin's own README for its exact registered content.
+
 ## Tools
 
 | Tool | Wraps | Purpose |

@@ -1065,6 +1065,27 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
     properties: { backend_mode: DEFAULT_BACKEND_MODE },
   });
 
+  // Real, plugin-controlled system-prompt injection -- see cline/index.ts's
+  // equivalent registerRule call for the confirmation this is a genuine
+  // runtime-system-prompt contribution (`AgentExtensionApi.registerRule`),
+  // not host-application config a plugin cannot itself set. Scoped to what
+  // this plugin actually provides -- dispatch, not just planning -- so a
+  // session with both `cline` and `cline-agents` installed gets both
+  // sentences composed together rather than the same generic sentence
+  // twice; see this plugin's own README for how each registered rule's id
+  // stays distinguishable if a host ever wants to filter/log them.
+  api.registerRule({
+    id: "cline-agents-system-prompt",
+    content:
+      "You are a coding assistant with access to Cadre role subagents. " +
+      "Use `dispatch_selected_roles` (routes through the same `bin/cadre select` plan `agents_select` " +
+      "uses, then immediately dispatches every selected primary/reviewer role) or `start_subagent` " +
+      "with a named `preset` to actually run one of the 71 bundled Cadre role presets as a background " +
+      "subagent. Use `list_agent_presets`/`list_skills` to discover what is available before " +
+      "dispatching, and `get_subagent`/`message_subagent` to poll or follow up with a running one.",
+    source: "cline-agents",
+  });
+
   function requireWorkspaceRoot(): string {
     if (!workspaceRoot) {
       throw new Error(
@@ -1563,7 +1584,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
 
 const plugin: AgentPlugin = {
   name: "cline-agents",
-  manifest: { capabilities: ["tools"] },
+  manifest: { capabilities: ["tools", "rules"] },
   setup,
 };
 

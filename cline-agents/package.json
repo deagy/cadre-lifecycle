@@ -11,7 +11,8 @@
           "./index.ts"
         ],
         "capabilities": [
-          "tools"
+          "tools",
+          "rules"
         ]
       }
     ]

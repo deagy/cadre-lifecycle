@@ -105,6 +105,30 @@ export type { AgentsSelectInput, AgentsSelectError };
 const setup = (api: SetupApi, ctx: SetupContext) => {
   const rootPath = ctx.workspaceInfo?.rootPath;
 
+  // Real, plugin-controlled system-prompt injection: `registerRule` content is
+  // appended to the host's `config.systemPrompt` (if any) when the session
+  // composes its final system prompt -- confirmed by reading
+  // `@cline/shared`'s `AgentExtensionApi.registerRule` type declaration
+  // ("Register prompt rules included in the runtime system prompt. Requires
+  // the `rules` capability.") and `@cline/core`'s compiled
+  // `SessionRuntime.composeSystemPrompt()`, which joins `this.config
+  // .systemPrompt.trim()` with every registered rule's trimmed content. This
+  // is distinct from (and additive to) a host application's own
+  // `systemPrompt` config field on `ClineCore.create()`/`cline.start()` --
+  // this plugin does not need the host to set anything for this sentence to
+  // reach the model. Requires the "rules" capability, declared below and in
+  // package.json's `cline.plugins[0].capabilities`.
+  api.registerRule({
+    id: "cadre-system-prompt",
+    content:
+      "You are a coding assistant with access to Cadre role subagents. " +
+      "Call the `agents_select` tool to get a deterministic, reviewable dispatch plan from the Cadre " +
+      "role catalog before choosing which specialist role(s) a task needs. It returns a plan only -- " +
+      "it never invokes, dispatches, retrieves knowledge for, merges, deploys, or mutates anything " +
+      "itself.",
+    source: "cadre",
+  });
+
   api.registerTool(
     createTool({
       name: "agents_select",
@@ -171,7 +195,7 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
 
 const plugin: AgentPlugin = {
   name: "cadre",
-  manifest: { capabilities: ["tools"] },
+  manifest: { capabilities: ["tools", "rules"] },
   setup,
 };
 
