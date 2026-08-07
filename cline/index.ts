@@ -4,9 +4,20 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { type AgentPlugin, type AgentToolContext, createTool } from "@cline/sdk";
-import { safeJsonStringify } from "@cline/shared";
+import { safeJsonStringify, truncateStr } from "@cline/shared";
 
 const execFileAsync = promisify(execFile);
+
+// Bounds the catch path's error/stderr text (see below). sanitizeToolResult
+// only guarantees JSON-serialization safety, not content redaction -- it
+// would happily pass through an arbitrarily large or path-laden blob
+// verbatim. The bounded, developer-authored text every currently-known
+// failure mode produces (spawn ENOENT, select_agents.py's own argument
+// validation) is nowhere close to this limit; it exists to cap worst-case
+// exposure/size if that assumption ever stops holding (e.g. a future
+// shell wrapper or an uncaught Python traceback with interpolated absolute
+// paths), not to redact anything today.
+const MAX_ERROR_TEXT_LENGTH = 2000;
 
 // Resolved from this module's own location, not the target workspace: the
 // `cadre` CLI lives at <this repository's root>/bin/cadre regardless of which
@@ -192,10 +203,20 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
             stdout?: string;
             detail?: string;
           };
+          // `caught as {...}` is a compile-time assertion only -- nothing
+          // guarantees `err.stderr`/`err.message` are actually strings at
+          // runtime (execFile's documented contract can be violated by an
+          // unexpected thrown shape). Normalize with a real `typeof` check
+          // before calling `.trim()`/truncateStr on either: both throw
+          // (uncaught, since we're not inside sanitizeToolResult's own
+          // try/catch yet) when handed a non-string, which would defeat the
+          // very "never throw" guarantee this catch block exists to provide.
+          const stderr = typeof err.stderr === "string" ? truncateStr(err.stderr, MAX_ERROR_TEXT_LENGTH) : "";
+          const message = typeof err.message === "string" ? truncateStr(err.message, MAX_ERROR_TEXT_LENGTH) : "";
 
           return sanitizeToolResult({
-            error: [err.stderr?.trim(), err.message].filter(Boolean).join("\n") || "agents_select failed",
-            stderr: err.stderr,
+            error: [stderr.trim(), message].filter(Boolean).join("\n") || "agents_select failed",
+            stderr,
           }) as AgentsSelectError;
         }
       },
