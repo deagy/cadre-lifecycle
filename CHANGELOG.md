@@ -31,13 +31,20 @@ below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/rel
 
 ### Fixed
 
-- **`list_agent_presets` and `list_skills` (`cline-agents`) threw `Error: JSON.stringify cannot serialize cyclic structures`**, the same error class 0.9.6 fixed for `dispatch_selected_roles` — that fix only wrapped the one tool that happened to surface the bug first, not every tool whose return value flows through the same Cline SDK serialization path where a cyclic reference can be injected regardless of what the tool itself computed. Audited every `execute()` in `cline-agents/index.ts` and `cline/index.ts` and applied the existing `sanitizeToolResult()` helper consistently to every tool return path that lacked it (`start_subagent`, `list_agent_presets`, `message_subagent`, `get_subagent`, `save_handoff`, `read_handoff`, `list_skills`, `get_skill`, `create_review_subtask`, `write_wiki_page`, `write_evidence_comment` in `cline-agents`, plus one previously-unwrapped early-return path in `cline`'s `agents_select`) — no tool's behavior, error semantics, or return shape changed beyond sanitization. Added regression tests for `list_agent_presets`/`list_skills` following the same genuine-self-referential-object-plus-control-assertion pattern as 0.9.6's `dispatch_selected_roles` test.
+- **`list_agent_presets` and `list_skills` (`cline-agents`) threw `Error: JSON.stringify cannot serialize cyclic structures`** — the same error class 0.9.6 fixed for `dispatch_selected_roles`, which only wrapped that one tool rather than every tool whose return value flows through the same Cline SDK serialization path.
+  - Audited every `execute()` in `cline-agents/index.ts` and `cline/index.ts`.
+  - Applied the existing `sanitizeToolResult()` helper to every tool return path that lacked it: `start_subagent`, `list_agent_presets`, `message_subagent`, `get_subagent`, `save_handoff`, `read_handoff`, `list_skills`, `get_skill`, `create_review_subtask`, `write_wiki_page`, `write_evidence_comment` in `cline-agents`, plus one previously-unwrapped early-return path in `cline`'s `agents_select`.
+  - No tool's behavior, error semantics, or return shape changed beyond sanitization.
+  - Added regression tests for `list_agent_presets`/`list_skills`, following the same genuine-self-referential-object-plus-control-assertion pattern as 0.9.6's `dispatch_selected_roles` test.
 
 ## [0.9.6](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.6) - 2026-08-06
 
 ### Fixed
 
-- **`dispatch_selected_roles` (`cline-agents`) now sanitizes its tool result against non-JSON-serializable values** before returning it, via a new `sanitizeToolResult()` helper (mirroring the existing pattern in `cline/index.ts`) built on `@cline/shared`'s `safeJsonStringify` (#31). Independent review found the PR's original regression test didn't actually reproduce a cyclic-reference failure and a stray `package-lock.json` version-pin drift on `typescript` had crept in unrelated to the fix; both were corrected before merge — the lockfile now pins `typescript` exactly, and the test suite includes a direct unit test against a genuinely self-referential object with a control assertion proving it would have failed pre-fix.
+- **`dispatch_selected_roles` (`cline-agents`) now sanitizes its tool result against non-JSON-serializable values** before returning it, via a new `sanitizeToolResult()` helper (mirroring the existing pattern in `cline/index.ts`) built on `@cline/shared`'s `safeJsonStringify` (#31).
+  - Independent review found two problems with the original PR, both corrected before merge: the regression test didn't actually reproduce a cyclic-reference failure, and an unrelated `package-lock.json` version-pin drift on `typescript` had crept in.
+  - The lockfile now pins `typescript` exactly.
+  - The test suite includes a direct unit test against a genuinely self-referential object, with a control assertion proving it would have failed pre-fix.
 
 ## [0.9.5](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.5) - 2026-08-06
 
