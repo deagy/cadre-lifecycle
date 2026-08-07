@@ -80,7 +80,7 @@ const UNSHIPPED_KERNEL_TOOL_NAMES = [
 ];
 
 describe("cadre-lifecycle plugin", () => {
-  it("declares the tools capability and registers exactly the 4 forge-agnostic sdlc tools plus the 6 forge-specific approval/link tools and the 10 gate-issues/status/reviewer tools", async () => {
+  it("declares the tools capability and registers exactly the 5 forge-agnostic sdlc tools plus the 6 forge-specific approval/link tools and the 10 gate-issues/status/reviewer tools", async () => {
     expect(plugin.manifest.capabilities).toEqual(["tools"]);
 
     const tools = await registerTools(REPO_ROOT);
@@ -88,6 +88,7 @@ describe("cadre-lifecycle plugin", () => {
       [
         "sdlc_init",
         "sdlc_validate",
+        "sdlc_plan",
         "sdlc_status",
         "sdlc_decide",
         ...GITLAB_TOOL_NAMES,
@@ -101,6 +102,7 @@ describe("cadre-lifecycle plugin", () => {
     const tools = await registerTools(REPO_ROOT);
     expect(findTool(tools, "sdlc_init").description).toMatch(/bin\/cadre sdlc init/);
     expect(findTool(tools, "sdlc_validate").description).toMatch(/bin\/cadre sdlc validate/);
+    expect(findTool(tools, "sdlc_plan").description).toMatch(/bin\/cadre sdlc plan/);
     expect(findTool(tools, "sdlc_status").description).toMatch(/bin\/cadre sdlc status/);
     expect(findTool(tools, "sdlc_decide").description).toMatch(/bin\/cadre sdlc decide/);
     expect(findTool(tools, "sdlc_approve_from_gitlab").description).toMatch(
@@ -802,6 +804,34 @@ describe("cadre-lifecycle plugin", () => {
         expect(result.status).toBe("dry-run");
         expect(result.mutation).toBe(false);
         expect(Array.isArray(result.would_create)).toBe(true);
+      });
+    });
+
+    describe("sdlc_plan against a scratch project", () => {
+      let scratchDir: string;
+
+      beforeAll(async () => {
+        scratchDir = mkdtempSync(path.join(tmpdir(), "cline-lifecycle-sdlc-plan-test-"));
+        await execFileAsync("git", ["init", "-q"], { cwd: scratchDir });
+      });
+
+      afterAll(() => {
+        rmSync(scratchDir, { recursive: true, force: true });
+      });
+
+      it("writes a dispatch plan and run record for a new task-id, or reports a structured error if the kernel is unavailable", async () => {
+        const tools = await registerTools(scratchDir);
+        const result = (await findTool(tools, "sdlc_plan").execute(
+          { taskId: "cline-lifecycle-test-plan-task", task: "cline-lifecycle-test task" },
+          {} as never,
+        )) as Record<string, unknown>;
+
+        if (result.error) {
+          expect(typeof result.error).toBe("string");
+          return;
+        }
+        expect(result.task_id).toBe("cline-lifecycle-test-plan-task");
+        expect(typeof result.status).toBe("string");
       });
     });
   });

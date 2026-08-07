@@ -15,6 +15,17 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.9.8](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.8) - 2026-08-06
+
+### Added
+
+- **`cline-lifecycle` gains a 21st tool, `sdlc_plan`**, wrapping `bin/cadre sdlc plan` (`agentic-sdlc plan`). Found during a routine Cline feature-parity scan: 13 forge-specific `SKILL.md` files reference `cadre sdlc plan` in passing ("... or `cadre sdlc plan` first") as the way to create a task's dispatch plan/run record before `sdlc_status`/`sdlc_decide` can operate on a brand-new task-id, but no skill gives it a numbered step of its own and no `cline-lifecycle` tool wrapped it — the only forge-agnostic `agentic-sdlc` subcommand referenced by the skills that had no Cline tool call. `sdlc_plan` takes `taskId`/`task` (both required) plus the usual optional `root`; like `sdlc_decide`, it is a real write with no dry-run mode (the kernel's `plan` subcommand has none).
+
+### Fixed
+
+- **`cline-agents/skills/run-agent-orchestration.md`'s "## Cline" section had drifted from its canonical source**, `skills/run-agent-orchestration/references/runner-adapters.md`. A 2026-08-06 live-verification correction (MCP registration now supports a real end-to-end dispatch, not just discovery — superseding an earlier 2026-08-05 finding) had been hand-added directly to the generated `cline-agents/` copy and never ported back to the canonical source, so the next `tools/port_cline_agents.py` regeneration (run automatically by `regenerate.yml`) would have silently regressed it back to stale text. Ported the correction into the canonical source and regenerated; this also fixed a leaked `suite/roster/orchestration/mcp/...` path in the previously hand-edited copy, now correctly abstracted by the generator's path-substitution table.
+- **`cline-lifecycle/README.md` miscounted its own forge-specific skills and tools.** Its intro claimed "all 8" GitHub-side skills (actually 9 — `publish-reviewer-nudge-github` has no GitLab equivalent, as the tool table already said) and its "GitLab (8 tools)"/"GitHub (8 tools)" bullet headers each actually list 7 tools (the other 2 are the forge-shared `sdlc_list_gate_status`/`sdlc_publish_gate_status`, already counted separately). Both counts corrected; 7 + 7 + 2 = 16 forge-specific tools, matching the stated total.
+
 ## [0.9.7](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.9.7) - 2026-08-06
 
 ### Fixed

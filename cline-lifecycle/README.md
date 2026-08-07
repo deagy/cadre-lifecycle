@@ -2,14 +2,19 @@
 
 A third distinct plugin, alongside [`cline/`](../cline) (role-selection planning)
 and [`cline-agents/`](../cline-agents) (role dispatch). This plugin,
-`cline-lifecycle`, exposes G1-G10 Agentic SDLC lifecycle governance as 20
+`cline-lifecycle`, exposes G1-G10 Agentic SDLC lifecycle governance as 21
 deterministic tool calls, wrapping the exact `bin/cadre sdlc <subcommand>`
 invocations the `cadre-lifecycle-core`/`-github`/`-gitlab` plugins' skills
 already document for Claude Code / Codex
 (`plugins/lifecycle/skills/{lifecycle-onboarding,lifecycle-review,brief-pending-gates}/SKILL.md`,
-all 8 of `plugins/lifecycle-gitlab/skills/*/SKILL.md`, and all 8 of
-`plugins/lifecycle-github/skills/*/SKILL.md`, except
-`brief-pending-gates-{gitlab,github}` — see below).
+all 8 of `plugins/lifecycle-gitlab/skills/*/SKILL.md`, and 8 of the 9
+`plugins/lifecycle-github/skills/*/SKILL.md` (GitHub has one more skill than
+GitLab — `publish-reviewer-nudge-github` has no GitLab equivalent, see
+below), except `brief-pending-gates-{gitlab,github}` — see below). `sdlc_plan`
+additionally wraps `agentic-sdlc plan`, a forge-agnostic kernel subcommand
+referenced only in passing ("... or `cadre sdlc plan` first") across 13
+forge-specific `SKILL.md` files rather than given a numbered step of its own
+in any one of them — see its row in the table below.
 
 Skills are a Claude Code / Codex mechanism with no Cline equivalent (see
 [`../skills/run-agent-orchestration/references/runner-adapters.md`](../skills/run-agent-orchestration/references/runner-adapters.md)'s
@@ -23,13 +28,13 @@ Code / Codex, and every one of them but `brief-pending-gates-{gitlab,github}`
 wraps a distinct forge-specific kernel subcommand — all of those are mirrored
 here, one tool per subcommand:
 
-- **GitLab (8 tools):** `sdlc_approve_from_gitlab`, `sdlc_approve_from_gitlab_mr`
+- **GitLab (7 tools):** `sdlc_approve_from_gitlab`, `sdlc_approve_from_gitlab_mr`
   (`lifecycle-review-gitlab`); `sdlc_link_intent_from_gitlab_issue`,
   `sdlc_link_requirements_from_gitlab_issue` (`link-source-issue-gitlab`);
   `sdlc_list_gate_issues_gitlab`, `sdlc_create_gate_issues_gitlab`
   (`gitlab-gate-tracking`); `sdlc_request_gate_reviewers_gitlab`
   (`report-gate-reviewers-gitlab`).
-- **GitHub (8 tools):** `sdlc_approve_from_github`, `sdlc_approve_from_github_pr`
+- **GitHub (7 tools):** `sdlc_approve_from_github`, `sdlc_approve_from_github_pr`
   (`lifecycle-review-github`); `sdlc_list_github_gate_issues`,
   `sdlc_create_github_gate_issues` (`create-github-gate-issues`);
   `sdlc_request_gate_reviewers_github` (`report-gate-reviewers-github`);
@@ -90,6 +95,7 @@ cline plugin install /path/to/cadre-lifecycle/cline-lifecycle --force
 |---|---|---|
 | `sdlc_init` | `bin/cadre sdlc init` | Initialize G1-G10 lifecycle tracking for a project. Pass `dryRun: true` first and inspect the result before writing for real. |
 | `sdlc_validate` | `bin/cadre sdlc validate` | Validate a project's Agentic SDLC configuration and run-record state. Returns errors/blockers as JSON. |
+| `sdlc_plan` | `bin/cadre sdlc plan` | Create (or overwrite) a task's dispatch plan and pending run record. This is a real write, not a dry-run preview -- the kernel's `plan` subcommand has no dry-run mode. Needed before `sdlc_status`/`sdlc_decide` can operate on a brand-new task-id. |
 | `sdlc_status` | `bin/cadre sdlc status` | Report a task's pending/decided lifecycle gates. Read-only. |
 | `sdlc_decide` | `bin/cadre sdlc decide` | Record a lifecycle gate decision. |
 | `sdlc_approve_from_gitlab` | `bin/cadre sdlc approve-from-gitlab` | Record a human gate approval from prepared GitLab MR-approval evidence. |

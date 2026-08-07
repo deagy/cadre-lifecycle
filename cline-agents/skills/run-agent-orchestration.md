@@ -473,9 +473,8 @@ falling back to manual injection:
   — so the same `dispatch_secure_cloud_role`/`poll_dispatch_status`/
   `dispatch_team`/`poll_team_status`/`dispatch_team_recipe` server documented
   for Codex CLI above *can* be registered for Cline too, from a full source
-  checkout (not the packaged plugin — `suite/roster/orchestration/mcp/
-  dispatch_server.py` and its `requirements-mcp.txt` pin are only present
-  there):
+  checkout (not the packaged plugin — the bundled MCP dispatch server implementation
+  and its `requirements-mcp.txt` pin are only present there):
   1. `cline mcp add --yes agents-dispatch -- <repo>/bin/cadre
      mcp-dispatch-server` registers cleanly with no warnings, and a live
      act-mode `cline` session correctly lists all five tools in its toolset,

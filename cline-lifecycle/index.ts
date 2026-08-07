@@ -33,8 +33,13 @@ const CADRE_BIN = path.resolve(PLUGIN_DIR, "..", "bin", "cadre");
 // role selection/dispatch: deterministic tool calls wrapping the exact
 // `bin/cadre sdlc <subcommand>` invocations those skills already document
 // (see plugins/lifecycle/skills/{lifecycle-onboarding,lifecycle-review,
-// brief-pending-gates}/SKILL.md), turning a conversational flow into 4
-// direct tool calls: sdlc_init, sdlc_validate, sdlc_status, sdlc_decide.
+// brief-pending-gates}/SKILL.md), turning a conversational flow into 5
+// direct tool calls: sdlc_init, sdlc_validate, sdlc_plan, sdlc_status,
+// sdlc_decide. sdlc_plan wraps `agentic-sdlc plan`, the fallback command 13
+// forge-specific SKILL.md files point to in passing ("... or `cadre sdlc
+// plan` first") when a task-id has no run record yet -- it was never given
+// a numbered step of its own in any skill, so this tool's description cites
+// that same fallback phrasing rather than a specific step.
 //
 // This plugin does no interpretation of its own beyond argument-building and
 // JSON pass-through -- in particular sdlc_decide never adds its own
@@ -43,11 +48,11 @@ const CADRE_BIN = path.resolve(PLUGIN_DIR, "..", "bin", "cadre");
 // structurally (see CLAUDE.md's "Human approval invariant"); this tool only
 // relays whatever the kernel decides, success or refusal.
 //
-// The 4 tools above are forge-agnostic. `cadre-lifecycle-gitlab`/`-github`
+// The 5 tools above are forge-agnostic. `cadre-lifecycle-gitlab`/`-github`
 // additionally bundle 8 forge-specific skills each (lifecycle-review-gitlab,
 // link-source-issue-gitlab, etc. -- see plugins/lifecycle-{gitlab,github}/
 // skills/) for Claude Code / Codex, driving forge-specific kernel
-// subcommands the 4 tools above have no access to. This plugin closes that
+// subcommands the 5 tools above have no access to. This plugin closes that
 // same gap with the tool calls below, one per forge-specific kernel
 // subcommand, following the exact same convention throughout: deterministic
 // argument-building and JSON pass-through, no approval/linking/publishing
@@ -103,6 +108,14 @@ const SdlcInitInput = z
   .strict();
 
 const SdlcValidateInput = z.object({ root: RootInput.optional() }).strict();
+
+const SdlcPlanInput = z
+  .object({
+    root: RootInput.optional(),
+    taskId: z.string().min(1).describe("Task ID to create (or overwrite) a dispatch plan and pending run record for (required)."),
+    task: z.string().min(1).describe("Task objective used for routing (required)."),
+  })
+  .strict();
 
 const SdlcStatusInput = z
   .object({
@@ -387,6 +400,7 @@ const SdlcPublishReviewerNudgeInput = z
 
 type SdlcInitInputShape = z.infer<typeof SdlcInitInput>;
 type SdlcValidateInputShape = z.infer<typeof SdlcValidateInput>;
+type SdlcPlanInputShape = z.infer<typeof SdlcPlanInput>;
 type SdlcStatusInputShape = z.infer<typeof SdlcStatusInput>;
 type SdlcDecideInputShape = z.infer<typeof SdlcDecideInput>;
 type SdlcApproveFromGitlabInputShape = z.infer<typeof SdlcApproveFromGitlabInput>;
@@ -432,6 +446,10 @@ function buildInitArgs(input: SdlcInitInputShape, rootPath: string): string[] {
 
 function buildValidateArgs(input: SdlcValidateInputShape, rootPath: string): string[] {
   return ["sdlc", "validate", "--root", input.root ?? rootPath];
+}
+
+function buildPlanArgs(input: SdlcPlanInputShape, rootPath: string): string[] {
+  return ["sdlc", "plan", "--root", input.root ?? rootPath, "--task-id", input.taskId, "--task", input.task];
 }
 
 function buildStatusArgs(input: SdlcStatusInputShape, rootPath: string): string[] {
@@ -904,6 +922,25 @@ const setup = (api: SetupApi, ctx: SetupContext) => {
         const input = SdlcValidateInput.parse(rawInput);
         const root = requireRootPath(input.root);
         return runCadreSdlc(buildValidateArgs(input, root), root);
+      },
+    }),
+  );
+
+  api.registerTool(
+    createTool({
+      name: "sdlc_plan",
+      description:
+        "Create (or overwrite) a task's dispatch plan and pending run record, via `bin/cadre sdlc plan` -- " +
+        "the same fallback command 13 forge-specific SKILL.md files point to (e.g. " +
+        "lifecycle-review-github/SKILL.md's Step 2: 'or `cadre sdlc plan` first') when `sdlc_status`/" +
+        "`sdlc_decide` need a run record for a task-id that doesn't exist yet. Writes " +
+        "`.agentic-sdlc/runs/<taskId>/dispatch-plan.json` and `run-record.json` -- this is a real write, " +
+        "not a dry-run preview; the kernel's `plan` subcommand has no dry-run mode.",
+      inputSchema: z.toJSONSchema(SdlcPlanInput),
+      execute: async (rawInput: unknown): Promise<Record<string, unknown> | SdlcToolError> => {
+        const input = SdlcPlanInput.parse(rawInput);
+        const root = requireRootPath(input.root);
+        return runCadreSdlc(buildPlanArgs(input, root), root);
       },
     }),
   );
