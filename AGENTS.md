@@ -77,7 +77,7 @@ See [Safety Model](#safety-model) for the prohibited-content list. Preserve inde
 
 The Agentic SDLC kernel owns lifecycle gate schemas, run-record validation, and gate-authority semantics. It is consumed here as an external dependency (the separately installed `agentic-sdlc` CLI from `deagy/agentic-sdlc`, invoked via `bin/cadre sdlc`), not vendored.
 
-Do not copy lifecycle schemas, run-record validators, gate authorities, or kernel authority into the Cadre register. Never infer gate approval, production/destructive authority, risk acceptance, or compliance applicability for another project.
+Do not copy lifecycle schemas, run-record validators, gate authorities, or kernel authority into this repository. Never infer gate approval, production/destructive authority, risk acceptance, or compliance applicability for another project.
 
 Artifact authors must remain separate from independent reviewers and human approvers — this invariant is enforced in both role selection and lifecycle gates.
 

@@ -1,12 +1,18 @@
 
 # Dependabot configuration for deagy/cadre-lifecycle
 #
-# Automated dependency updates for TypeScript/Node.js workspace dependencies.
+# Automated dependency updates for this repository.
+# This is a single-lockfile monorepo: there is only one package-lock.json at
+# the repo root, so per-workspace npm directory entries must not be used —
+# Dependabot resolves them against the shared root lockfile regardless of
+# which member triggered them, producing conflicts and lock desync between
+# concurrently open Dependabot PRs (see npm workspaces docs: the root entry
+# already covers all workspace members).
 # See: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
 updates:
-  # Root package.json (workspace orchestration)
+  # Root package.json (workspace orchestration — covers all npm workspace members)
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -21,54 +27,6 @@ updates:
       - "dependencies"
       - "npm"
 
-  # cline/ workspace
-  - package-ecosystem: "npm"
-    directory: "/cline"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: "deps:cline"
-    labels:
-      - "dependencies"
-      - "npm"
-      - "cline-plugin"
-
-  # cline-agents/ workspace
-  - package-ecosystem: "npm"
-    directory: "/cline-agents"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: "deps:cline-agents"
-    labels:
-      - "dependencies"
-      - "npm"
-      - "cline-agents"
-
-  # cline-lifecycle/ workspace
-  - package-ecosystem: "npm"
-    directory: "/cline-lifecycle"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: "deps:cline-lifecycle"
-    labels:
-      - "dependencies"
-      - "npm"
-      - "cline-lifecycle"
-
   # GitHub Actions workflow dependencies
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -82,3 +40,18 @@ updates:
     labels:
       - "dependencies"
       - "ci"
+
+  # Python (agentic-sdlc kernel install — see .github/workflows/validate.yml)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "dependencies"
+      - "pip"
