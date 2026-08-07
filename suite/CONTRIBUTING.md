@@ -43,8 +43,10 @@ understand scope -> make a focused change -> run relevant checks
 ```
 
 Do not commit or push any of the prohibited content listed in
-[AGENTS.md Safety Model](../AGENTS.md#safety-model). Do not make
-persistent-environment or production changes as part of repository validation.
+[AGENTS.md's Commit & Merge Request
+Guidelines](AGENTS.md#commit--merge-request-guidelines). Do not make
+persistent-environment or production changes as part of repository
+validation.
 
 ## Documentation changes
 

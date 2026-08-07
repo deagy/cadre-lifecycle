@@ -130,6 +130,25 @@ GITLAB_LEAK_TERMS = (
 )
 
 
+# The three bundled skills each carry a callout explaining the duplication
+# itself -- necessarily forge-copy-only, since it references *this*
+# repository's own AGENTS.md plugin-split rationale, a cadre-lifecycle-
+# specific concept the register (source of the core copy) has no notion of.
+# The core copy is entirely register-generated (plugins/lifecycle/skills/ is
+# a GENERATED_NESTED_PATHS entry there), so this note can never live there
+# without a future regeneration silently deleting it again -- confirmed by
+# exactly that happening once already (deagy/cadre-lifecycle, drift-check
+# investigation). Normalized away here, not treated as unexpected drift.
+DUPLICATION_NOTE = (
+    "> Duplication note: this skill's body is intentionally duplicated across "
+    "the core plugin and both forge plugins so each plugin is self-sufficient "
+    "and needs no dependency on the others (see AGENTS.md's plugin-split "
+    "rationale). Frontmatter `name`/`description` and forge-specific "
+    "cross-references intentionally differ per copy; the body must otherwise "
+    "stay in sync -- `tools/test_plugin_duplication_health.py` enforces it.\n\n"
+)
+
+
 def _normalize_forge_terms(forge: str, text: str) -> str:
     if forge != "github":
         return text
@@ -253,13 +272,41 @@ class DuplicatedSkillBodyTests(unittest.TestCase):
                 forge_body = _skill_body(self._forge_path(skill, forge))
                 normalized = _skill_name_pattern(forge).sub(_normalize_skill_name, forge_body)
                 normalized = _normalize_forge_terms(forge, normalized)
+                normalized = normalized.replace(DUPLICATION_NOTE, "", 1)
                 self.assertEqual(
                     core_body,
                     normalized,
                     f"{self._forge_path(skill, forge)} body has drifted from "
                     f"{self._core_path(skill)} beyond the expected cross-reference "
-                    "renames",
+                    "renames and the forge-only duplication note",
                 )
+
+    def test_forge_copies_carry_the_duplication_note(self) -> None:
+        # The positive half of the normalization above: proves the note is
+        # actually present in every forge copy, rather than the normalization
+        # silently no-op'ing (e.g. after a future wording tweak) and this
+        # test class passing for the wrong reason.
+        for skill in self.SKILLS:
+            for forge in FORGES:
+                path = self._forge_path(skill, forge)
+                body = _skill_body(path)
+                self.assertIn(DUPLICATION_NOTE, body, f"{path} is missing the duplication-note callout")
+
+    def test_core_copy_never_carries_the_duplication_note(self) -> None:
+        # The core copy is entirely register-generated; a hand-added
+        # duplication note there would silently vanish on the next real
+        # regeneration (exactly what happened before this test existed).
+        # Fail loudly instead if it ever reappears there.
+        for skill in self.SKILLS:
+            path = self._core_path(skill)
+            body = _skill_body(path)
+            self.assertNotIn(
+                DUPLICATION_NOTE,
+                body,
+                f"{path} (register-generated) carries the forge-only duplication note -- "
+                "it will be silently deleted on the next real regeneration; remove it here "
+                "instead of relying on that",
+            )
 
     def test_github_copies_translate_gate_tracking_terms(self) -> None:
         # Regression guard: a github copy that left core's GitLab-flavored

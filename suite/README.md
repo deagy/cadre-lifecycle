@@ -162,8 +162,7 @@ are `roster/`, `.agents/skills/`, `provider/`, and `packaging/plugin-README.md`
 The generator has no concept of this repository's 4-plugin split and will
 clobber hand-authored content (the root `README.md`, `plugins/lifecycle-github/`,
 `plugins/lifecycle-gitlab/`, etc.). Generate into a scratch directory instead
-and diff, following the root [`README.md`'s "Regenerating
-Assets"](../README.md#regenerating-assets) procedure:
+and diff:
 
 ```sh
 git clone https://github.com/deagy/cadre.git
