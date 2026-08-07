@@ -6,7 +6,16 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { AgentTool } from "@cline/sdk";
-import { plugin, type SetupApi, type SetupContext } from "./index.ts";
+import {
+  plugin,
+  type SetupApi,
+  type SetupContext,
+  buildPublishGateStatusArgs,
+  buildCreateGateIssuesGitlabArgs,
+  buildCreateGithubGateIssuesArgs,
+  buildRequestGateReviewersGitlabArgs,
+  buildRequestGateReviewersGithubArgs,
+} from "./index.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -48,13 +57,43 @@ const GITLAB_TOOL_NAMES = [
   "sdlc_link_requirements_from_gitlab_issue",
 ];
 
+const GITHUB_TOOL_NAMES = ["sdlc_approve_from_github", "sdlc_approve_from_github_pr"];
+
+// These 10 wrap kernel subcommands not present in every agentic-sdlc release
+// within this repository's declared kernel_compatibility range -- see
+// index.ts's "About this plugin" comment. Grouped separately so the
+// "real bin/cadre sdlc subprocess calls" describe block below can assert
+// the specific, deterministic "invalid choice" failure shape they produce
+// against a kernel that predates them, distinctly from the other tools'
+// ordinary structured-error assertions.
+const UNSHIPPED_KERNEL_TOOL_NAMES = [
+  "sdlc_list_gate_issues_gitlab",
+  "sdlc_create_gate_issues_gitlab",
+  "sdlc_list_github_gate_issues",
+  "sdlc_create_github_gate_issues",
+  "sdlc_list_gate_status",
+  "sdlc_publish_gate_status",
+  "sdlc_request_gate_reviewers_gitlab",
+  "sdlc_request_gate_reviewers_github",
+  "sdlc_list_reviewer_nudge",
+  "sdlc_publish_reviewer_nudge",
+];
+
 describe("cadre-lifecycle plugin", () => {
-  it("declares the tools capability and registers exactly the 4 forge-agnostic sdlc tools plus the 4 GitLab-specific ones", async () => {
+  it("declares the tools capability and registers exactly the 4 forge-agnostic sdlc tools plus the 6 forge-specific approval/link tools and the 10 gate-issues/status/reviewer tools", async () => {
     expect(plugin.manifest.capabilities).toEqual(["tools"]);
 
     const tools = await registerTools(REPO_ROOT);
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ["sdlc_init", "sdlc_validate", "sdlc_status", "sdlc_decide", ...GITLAB_TOOL_NAMES].sort(),
+      [
+        "sdlc_init",
+        "sdlc_validate",
+        "sdlc_status",
+        "sdlc_decide",
+        ...GITLAB_TOOL_NAMES,
+        ...GITHUB_TOOL_NAMES,
+        ...UNSHIPPED_KERNEL_TOOL_NAMES,
+      ].sort(),
     );
   });
 
@@ -76,11 +115,50 @@ describe("cadre-lifecycle plugin", () => {
     expect(findTool(tools, "sdlc_link_requirements_from_gitlab_issue").description).toMatch(
       /bin\/cadre sdlc link-requirements-from-gitlab-issue/,
     );
+    expect(findTool(tools, "sdlc_approve_from_github").description).toMatch(
+      /bin\/cadre sdlc approve-from-github`/,
+    );
+    expect(findTool(tools, "sdlc_approve_from_github_pr").description).toMatch(
+      /bin\/cadre sdlc approve-from-github-pr/,
+    );
+    expect(findTool(tools, "sdlc_list_gate_issues_gitlab").description).toMatch(
+      /bin\/cadre sdlc list-gate-issues/,
+    );
+    expect(findTool(tools, "sdlc_create_gate_issues_gitlab").description).toMatch(
+      /bin\/cadre sdlc create-gate-issues/,
+    );
+    expect(findTool(tools, "sdlc_list_github_gate_issues").description).toMatch(
+      /bin\/cadre sdlc list-github-gate-issues/,
+    );
+    expect(findTool(tools, "sdlc_create_github_gate_issues").description).toMatch(
+      /bin\/cadre sdlc create-github-gate-issues/,
+    );
+    expect(findTool(tools, "sdlc_list_gate_status").description).toMatch(/bin\/cadre sdlc list-gate-status/);
+    expect(findTool(tools, "sdlc_publish_gate_status").description).toMatch(
+      /bin\/cadre sdlc publish-gate-status/,
+    );
+    expect(findTool(tools, "sdlc_request_gate_reviewers_gitlab").description).toMatch(
+      /bin\/cadre sdlc request-gate-reviewers-gitlab/,
+    );
+    expect(findTool(tools, "sdlc_request_gate_reviewers_github").description).toMatch(
+      /bin\/cadre sdlc request-gate-reviewers/,
+    );
+    expect(findTool(tools, "sdlc_list_reviewer_nudge").description).toMatch(
+      /bin\/cadre sdlc list-reviewer-nudge/,
+    );
+    expect(findTool(tools, "sdlc_publish_reviewer_nudge").description).toMatch(
+      /bin\/cadre sdlc publish-reviewer-nudge/,
+    );
   });
 
-  it("the two approve-from-gitlab tools add no approval logic of their own", async () => {
+  it("the four approve-from-gitlab/github tools add no approval logic of their own", async () => {
     const tools = await registerTools(REPO_ROOT);
-    for (const name of ["sdlc_approve_from_gitlab", "sdlc_approve_from_gitlab_mr"]) {
+    for (const name of [
+      "sdlc_approve_from_gitlab",
+      "sdlc_approve_from_gitlab_mr",
+      "sdlc_approve_from_github",
+      "sdlc_approve_from_github_pr",
+    ]) {
       const description = findTool(tools, name).description ?? "";
       expect(description).toMatch(/preparer\/verifier/);
       expect(description).toMatch(/no approval logic of its own/);
@@ -154,6 +232,237 @@ describe("cadre-lifecycle plugin", () => {
         {} as never,
       ),
     ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_approve_from_github").execute(
+        {
+          taskId: "x",
+          gate: "G1",
+          role: "test",
+          repo: "owner/repo",
+          pr: 1,
+          reviewId: "1",
+          reviewerLogin: "tester",
+          commitSha: "deadbeef",
+        },
+        {} as never,
+      ),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_approve_from_github_pr").execute(
+        { taskId: "x", gate: "G1", role: "test", repo: "owner/repo", pr: 1 },
+        {} as never,
+      ),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_list_gate_issues_gitlab").execute({ taskId: "x" }, {} as never),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_create_gate_issues_gitlab").execute(
+        { taskId: "x", projectPath: "group/project", asBot: "bot" },
+        {} as never,
+      ),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_list_github_gate_issues").execute({ taskId: "x" }, {} as never),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_create_github_gate_issues").execute(
+        { taskId: "x", repo: "owner/repo", asBot: "bot", allowClassification: "internal" },
+        {} as never,
+      ),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_list_gate_status").execute({ taskId: "x" }, {} as never),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_publish_gate_status").execute(
+        {
+          forge: "gitlab",
+          taskId: "x",
+          projectPath: "group/project",
+          mrIid: 1,
+          asBot: "bot",
+          allowClassification: "internal",
+        },
+        {} as never,
+      ),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_request_gate_reviewers_gitlab").execute(
+        { taskId: "x", projectPath: "group/project", mrIid: 1, asBot: "bot", allowClassification: "internal" },
+        {} as never,
+      ),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_request_gate_reviewers_github").execute(
+        { taskId: "x", repo: "owner/repo", pr: 1, asBot: "bot", allowClassification: "internal" },
+        {} as never,
+      ),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_list_reviewer_nudge").execute({ taskId: "x" }, {} as never),
+    ).rejects.toThrow(/root/i);
+    await expect(
+      findTool(tools, "sdlc_publish_reviewer_nudge").execute(
+        { taskId: "x", repo: "owner/repo", pr: 1, asBot: "bot", allowClassification: "internal" },
+        {} as never,
+      ),
+    ).rejects.toThrow(/root/i);
+  });
+
+  describe("argument construction (kernel-free)", () => {
+    // These assert the exact argv built for the kernel subprocess directly,
+    // with no subprocess call at all -- unlike the "real subprocess calls"
+    // tests below, these can't be fooled by a missing/stale kernel binary
+    // into passing vacuously, and are the right tool for asserting a
+    // branch/join was built correctly rather than merely "didn't throw".
+    // Covers gaps two review rounds found untested: the
+    // sdlc_publish_gate_status discriminated union's GitHub branch (only
+    // the GitLab branch had any coverage, even at the smoke-test level), and
+    // the `gates` array -> comma-separated `--gates` string join used by
+    // buildCreateGateIssuesGitlabArgs/buildCreateGithubGateIssuesArgs and
+    // buildRequestGateReviewersGitlabArgs/buildRequestGateReviewersGithubArgs
+    // -- both the GitLab and GitHub side of each pair are exported and
+    // tested here (a first round only covered the GitLab side and treated
+    // it as standing in for both, which a follow-up review correctly
+    // called out as an overclaim -- the expression is identical, but
+    // "identical code" and "tested code" aren't the same thing).
+
+    it("buildPublishGateStatusArgs (gitlab branch) emits --project-path/--mr-iid, not --repo/--pr", () => {
+      const args = buildPublishGateStatusArgs(
+        {
+          forge: "gitlab",
+          taskId: "t1",
+          projectPath: "group/project",
+          mrIid: 7,
+          asBot: "bot",
+          apply: true,
+        },
+        "/root",
+      );
+      expect(args).toEqual([
+        "sdlc",
+        "publish-gate-status",
+        "--root",
+        "/root",
+        "--task-id",
+        "t1",
+        "--forge",
+        "gitlab",
+        "--project-path",
+        "group/project",
+        "--mr-iid",
+        "7",
+        "--as-bot",
+        "bot",
+        "--apply",
+      ]);
+    });
+
+    it("buildPublishGateStatusArgs (github branch) emits --repo/--pr, not --project-path/--mr-iid", () => {
+      const args = buildPublishGateStatusArgs(
+        {
+          forge: "github",
+          taskId: "t1",
+          repo: "owner/repo",
+          pr: 9,
+          asBot: "bot",
+          allowClassification: "internal",
+        },
+        "/root",
+      );
+      expect(args).toEqual([
+        "sdlc",
+        "publish-gate-status",
+        "--root",
+        "/root",
+        "--task-id",
+        "t1",
+        "--forge",
+        "github",
+        "--repo",
+        "owner/repo",
+        "--pr",
+        "9",
+        "--as-bot",
+        "bot",
+        "--allow-classification",
+        "internal",
+      ]);
+      expect(args).not.toContain("--project-path");
+      expect(args).not.toContain("--mr-iid");
+    });
+
+    it("buildCreateGateIssuesGitlabArgs joins a gates array into a single comma-separated --gates value", () => {
+      const args = buildCreateGateIssuesGitlabArgs(
+        { taskId: "t1", projectPath: "group/project", asBot: "bot", gates: ["G3", "G9"] },
+        "/root",
+      );
+      const gatesIndex = args.indexOf("--gates");
+      expect(gatesIndex).toBeGreaterThan(-1);
+      expect(args[gatesIndex + 1]).toBe("G3,G9");
+      // Neither element ends up as its own argv entry -- a naive
+      // implementation could pass the array through unjoined.
+      expect(args).not.toContain("G3");
+      expect(args).not.toContain("G9");
+    });
+
+    it("buildRequestGateReviewersGitlabArgs omits --gates entirely when the array is empty or absent", () => {
+      const withEmpty = buildRequestGateReviewersGitlabArgs(
+        { taskId: "t1", projectPath: "group/project", mrIid: 1, asBot: "bot", gates: [] },
+        "/root",
+      );
+      const withAbsent = buildRequestGateReviewersGitlabArgs(
+        { taskId: "t1", projectPath: "group/project", mrIid: 1, asBot: "bot" },
+        "/root",
+      );
+      expect(withEmpty).not.toContain("--gates");
+      expect(withAbsent).not.toContain("--gates");
+    });
+
+    // GitHub-side counterparts of the two `gates` tests above -- a prior
+    // review round found the GitLab-side pair was exported and tested but
+    // the identical `input.gates?.length ? args.push("--gates", ...) : ...`
+    // expression in the GitHub builders was left with zero coverage despite
+    // a code comment implying the GitLab pair "stood in for all of them."
+
+    it("buildCreateGithubGateIssuesArgs joins a gates array into a single comma-separated --gates value", () => {
+      const args = buildCreateGithubGateIssuesArgs(
+        { taskId: "t1", repo: "owner/repo", asBot: "bot", gates: ["G3", "G9"] },
+        "/root",
+      );
+      const gatesIndex = args.indexOf("--gates");
+      expect(gatesIndex).toBeGreaterThan(-1);
+      expect(args[gatesIndex + 1]).toBe("G3,G9");
+      expect(args).not.toContain("G3");
+      expect(args).not.toContain("G9");
+    });
+
+    it("buildCreateGithubGateIssuesArgs includes --allow-public-repo only when explicitly set", () => {
+      const withFlag = buildCreateGithubGateIssuesArgs(
+        { taskId: "t1", repo: "owner/repo", asBot: "bot", allowPublicRepo: true },
+        "/root",
+      );
+      const withoutFlag = buildCreateGithubGateIssuesArgs(
+        { taskId: "t1", repo: "owner/repo", asBot: "bot" },
+        "/root",
+      );
+      expect(withFlag).toContain("--allow-public-repo");
+      expect(withoutFlag).not.toContain("--allow-public-repo");
+    });
+
+    it("buildRequestGateReviewersGithubArgs omits --gates entirely when the array is empty or absent", () => {
+      const withEmpty = buildRequestGateReviewersGithubArgs(
+        { taskId: "t1", repo: "owner/repo", pr: 1, asBot: "bot", gates: [] },
+        "/root",
+      );
+      const withAbsent = buildRequestGateReviewersGithubArgs(
+        { taskId: "t1", repo: "owner/repo", pr: 1, asBot: "bot" },
+        "/root",
+      );
+      expect(withEmpty).not.toContain("--gates");
+      expect(withAbsent).not.toContain("--gates");
+    });
   });
 
   describe("real bin/cadre sdlc subprocess calls", () => {
@@ -271,6 +580,195 @@ describe("cadre-lifecycle plugin", () => {
         {} as never,
       )) as Record<string, unknown>;
       expect(typeof result.error).toBe("string");
+    });
+
+    it("sdlc_approve_from_github returns a structured error (never a false success) for a nonexistent task/gate", async () => {
+      const tools = await registerTools(REPO_ROOT);
+      const result = (await findTool(tools, "sdlc_approve_from_github").execute(
+        {
+          taskId: "cline-lifecycle-test-nonexistent-task",
+          gate: "G1",
+          role: "cline-lifecycle-test-role",
+          repo: "cline-lifecycle-test/repo",
+          pr: 1,
+          reviewId: "1",
+          reviewerLogin: "cline-lifecycle-test-reviewer",
+          commitSha: "0000000000000000000000000000000000000000",
+        },
+        {} as never,
+      )) as Record<string, unknown>;
+      expect(typeof result.error).toBe("string");
+      expect(result.status).not.toBe("approved");
+    });
+
+    it("sdlc_approve_from_github_pr returns a structured error (never a false success) for a nonexistent task/gate", async () => {
+      const tools = await registerTools(REPO_ROOT);
+      const result = (await findTool(tools, "sdlc_approve_from_github_pr").execute(
+        {
+          taskId: "cline-lifecycle-test-nonexistent-task",
+          gate: "G1",
+          role: "cline-lifecycle-test-role",
+          repo: "cline-lifecycle-test/repo",
+          pr: 1,
+        },
+        {} as never,
+      )) as Record<string, unknown>;
+      expect(typeof result.error).toBe("string");
+      expect(result.status).not.toBe("approved");
+    });
+
+    describe("kernel subcommands not shipped by every agentic-sdlc release in range", () => {
+      // These 10 tools wrap kernel subcommands the packaged skills document
+      // but that the kernel version actually installed in this environment
+      // doesn't have -- see index.ts's "About this plugin" comment. Rather
+      // than skip testing them, assert the one thing that must always hold
+      // regardless of kernel version: the tool returns a structured result
+      // object (never a throw). Today that result is `{error, stderr}`
+      // ("invalid choice"); once a kernel that ships these subcommands is
+      // installed, it becomes a real success/refusal shape instead -- that
+      // transition is a kernel-upgrade concern, not a regression in this
+      // plugin's argument-building/pass-through, so these assertions check
+      // "did we get a structured result", not "did it fail".
+
+      it("sdlc_list_gate_issues_gitlab returns a structured result, not a throw", async () => {
+        const tools = await registerTools(REPO_ROOT);
+        const result = (await findTool(tools, "sdlc_list_gate_issues_gitlab").execute(
+          { taskId: "cline-lifecycle-test-nonexistent-task" },
+          {} as never,
+        )) as Record<string, unknown>;
+        expect(result).toBeTypeOf("object");
+      });
+
+      it("sdlc_create_gate_issues_gitlab returns a structured result, not a throw", async () => {
+        const tools = await registerTools(REPO_ROOT);
+        const result = (await findTool(tools, "sdlc_create_gate_issues_gitlab").execute(
+          {
+            taskId: "cline-lifecycle-test-nonexistent-task",
+            projectPath: "cline-lifecycle-test/project",
+            asBot: "cline-lifecycle-test-bot",
+          },
+          {} as never,
+        )) as Record<string, unknown>;
+        expect(result).toBeTypeOf("object");
+      });
+
+      it("sdlc_list_github_gate_issues returns a structured result, not a throw", async () => {
+        const tools = await registerTools(REPO_ROOT);
+        const result = (await findTool(tools, "sdlc_list_github_gate_issues").execute(
+          { taskId: "cline-lifecycle-test-nonexistent-task" },
+          {} as never,
+        )) as Record<string, unknown>;
+        expect(result).toBeTypeOf("object");
+      });
+
+      it("sdlc_create_github_gate_issues returns a structured result, not a throw", async () => {
+        const tools = await registerTools(REPO_ROOT);
+        const result = (await findTool(tools, "sdlc_create_github_gate_issues").execute(
+          {
+            taskId: "cline-lifecycle-test-nonexistent-task",
+            repo: "cline-lifecycle-test/repo",
+            asBot: "cline-lifecycle-test-bot",
+            allowClassification: "internal",
+          },
+          {} as never,
+        )) as Record<string, unknown>;
+        expect(result).toBeTypeOf("object");
+      });
+
+      it("sdlc_list_gate_status returns a structured result, not a throw", async () => {
+        const tools = await registerTools(REPO_ROOT);
+        const result = (await findTool(tools, "sdlc_list_gate_status").execute(
+          { taskId: "cline-lifecycle-test-nonexistent-task" },
+          {} as never,
+        )) as Record<string, unknown>;
+        expect(result).toBeTypeOf("object");
+      });
+
+      it("sdlc_publish_gate_status (gitlab) returns a structured result, not a throw", async () => {
+        const tools = await registerTools(REPO_ROOT);
+        const result = (await findTool(tools, "sdlc_publish_gate_status").execute(
+          {
+            forge: "gitlab",
+            taskId: "cline-lifecycle-test-nonexistent-task",
+            projectPath: "cline-lifecycle-test/project",
+            mrIid: 1,
+            asBot: "cline-lifecycle-test-bot",
+            allowClassification: "internal",
+          },
+          {} as never,
+        )) as Record<string, unknown>;
+        expect(result).toBeTypeOf("object");
+      });
+
+      it("sdlc_publish_gate_status (github) returns a structured result, not a throw", async () => {
+        const tools = await registerTools(REPO_ROOT);
+        const result = (await findTool(tools, "sdlc_publish_gate_status").execute(
+          {
+            forge: "github",
+            taskId: "cline-lifecycle-test-nonexistent-task",
+            repo: "cline-lifecycle-test/repo",
+            pr: 1,
+            asBot: "cline-lifecycle-test-bot",
+            allowClassification: "internal",
+          },
+          {} as never,
+        )) as Record<string, unknown>;
+        expect(result).toBeTypeOf("object");
+      });
+
+      it("sdlc_request_gate_reviewers_gitlab returns a structured result, not a throw", async () => {
+        const tools = await registerTools(REPO_ROOT);
+        const result = (await findTool(tools, "sdlc_request_gate_reviewers_gitlab").execute(
+          {
+            taskId: "cline-lifecycle-test-nonexistent-task",
+            projectPath: "cline-lifecycle-test/project",
+            mrIid: 1,
+            asBot: "cline-lifecycle-test-bot",
+            allowClassification: "internal",
+          },
+          {} as never,
+        )) as Record<string, unknown>;
+        expect(result).toBeTypeOf("object");
+      });
+
+      it("sdlc_request_gate_reviewers_github returns a structured result, not a throw", async () => {
+        const tools = await registerTools(REPO_ROOT);
+        const result = (await findTool(tools, "sdlc_request_gate_reviewers_github").execute(
+          {
+            taskId: "cline-lifecycle-test-nonexistent-task",
+            repo: "cline-lifecycle-test/repo",
+            pr: 1,
+            asBot: "cline-lifecycle-test-bot",
+            allowClassification: "internal",
+          },
+          {} as never,
+        )) as Record<string, unknown>;
+        expect(result).toBeTypeOf("object");
+      });
+
+      it("sdlc_list_reviewer_nudge returns a structured result, not a throw", async () => {
+        const tools = await registerTools(REPO_ROOT);
+        const result = (await findTool(tools, "sdlc_list_reviewer_nudge").execute(
+          { taskId: "cline-lifecycle-test-nonexistent-task" },
+          {} as never,
+        )) as Record<string, unknown>;
+        expect(result).toBeTypeOf("object");
+      });
+
+      it("sdlc_publish_reviewer_nudge returns a structured result, not a throw", async () => {
+        const tools = await registerTools(REPO_ROOT);
+        const result = (await findTool(tools, "sdlc_publish_reviewer_nudge").execute(
+          {
+            taskId: "cline-lifecycle-test-nonexistent-task",
+            repo: "cline-lifecycle-test/repo",
+            pr: 1,
+            asBot: "cline-lifecycle-test-bot",
+            allowClassification: "internal",
+          },
+          {} as never,
+        )) as Record<string, unknown>;
+        expect(result).toBeTypeOf("object");
+      });
     });
 
     describe("sdlc_init dry-run against a scratch project", () => {

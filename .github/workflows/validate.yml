@@ -109,6 +109,49 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      # cline-lifecycle/index.test.mts's "real bin/cadre sdlc subprocess
+      # calls" tests exercise the actual agentic-sdlc kernel binary, not a
+      # mock -- without it installed here, every one of those tests only
+      # ever exercises bin/cadre sdlc's own "kernel not found" fail-closed
+      # path, silently passing regardless of whether the tool-argument
+      # wiring is actually correct against a real kernel (found in review of
+      # PR #34). Install the exact version this repo's own provider.json
+      # declares as kernel_compatibility.minimum, the same one
+      # plugins/lifecycle/tools/bootstrap_sdlc.py installs for a human
+      # operator, read dynamically so this step can't itself drift stale.
+      # `provider.json` is checked out from the PR's own head (this workflow
+      # triggers on plain `pull_request`, not `pull_request_target`) -- a PR
+      # editing kernel_compatibility.minimum controls what this step fetches.
+      # Validate it's well-formed MAJOR.MINOR.PATCH before it ever reaches
+      # the git ref, exactly like tools/plugin_version.py's SEMVER_PATTERN
+      # and bootstrap_sdlc.py's own read_kernel_compatibility() do for the
+      # same field elsewhere in this repo -- fail closed on anything else
+      # (found in review of PR #34) rather than let an arbitrary string flow
+      # into `git+...@v<string>`. Validation and extraction happen in one
+      # Python invocation using re.fullmatch (whole-string by construction,
+      # no re.MULTILINE), not a separate `echo "$value" | grep -E '^...$'`
+      # step -- `grep` (without `-z`) matches per *line*, so a value
+      # containing an embedded newline (a legal JSON string, e.g.
+      # `"0.13.0\nanything"`, which `json.load` turns into a real newline in
+      # the shell variable) could pass a piped grep check on its matching
+      # line while the *whole* unsanitized value still reached `pip
+      # install` -- found in a follow-up review of the first fix.
+      - name: Install the pinned Agentic SDLC kernel
+        run: |
+          set -eu
+          minimum=$(python3 -c '
+          import json, re, sys
+          value = json.load(open("provider.json"))["kernel_compatibility"]["minimum"]
+          if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", value):
+              print(f"::error::provider.json kernel_compatibility.minimum ({value!r}) is not MAJOR.MINOR.PATCH semver", file=sys.stderr)
+              raise SystemExit(1)
+          print(value)
+          ')
+          pip install --user "git+https://github.com/deagy/agentic-sdlc.git@v${minimum}#subdirectory=plugins/agentic-sdlc"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       # package.json declares npm workspaces (cline, cline-agents,
       # cline-lifecycle) backed by a single root package-lock.json, so
       # `npm ci` must run from the repo root -- a per-directory lockfile no

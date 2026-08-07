@@ -2,13 +2,14 @@
 
 A third distinct plugin, alongside [`cline/`](../cline) (role-selection planning)
 and [`cline-agents/`](../cline-agents) (role dispatch). This plugin,
-`cline-lifecycle`, exposes G1-G10 Agentic SDLC lifecycle governance as 8
+`cline-lifecycle`, exposes G1-G10 Agentic SDLC lifecycle governance as 20
 deterministic tool calls, wrapping the exact `bin/cadre sdlc <subcommand>`
 invocations the `cadre-lifecycle-core`/`-github`/`-gitlab` plugins' skills
 already document for Claude Code / Codex
-(`plugins/lifecycle/skills/{lifecycle-onboarding,lifecycle-review,brief-pending-gates}/SKILL.md`
-plus `plugins/lifecycle-gitlab/skills/{lifecycle-review-gitlab,link-source-issue-gitlab}/SKILL.md`
-for the 4 GitLab-specific tools).
+(`plugins/lifecycle/skills/{lifecycle-onboarding,lifecycle-review,brief-pending-gates}/SKILL.md`,
+all 8 of `plugins/lifecycle-gitlab/skills/*/SKILL.md`, and all 8 of
+`plugins/lifecycle-github/skills/*/SKILL.md`, except
+`brief-pending-gates-{gitlab,github}` — see below).
 
 Skills are a Claude Code / Codex mechanism with no Cline equivalent (see
 [`../skills/run-agent-orchestration/references/runner-adapters.md`](../skills/run-agent-orchestration/references/runner-adapters.md)'s
@@ -16,15 +17,50 @@ Skills are a Claude Code / Codex mechanism with no Cline equivalent (see
 Cline at all — this plugin closes that gap the same way `cline/` and
 `cline-agents/` already close the equivalent gap for role selection/dispatch.
 
-The 4 GitLab-specific tools close a further, narrower gap: `cadre-lifecycle-gitlab`
-bundles 8 GitLab skills for Claude Code / Codex, but only 4 of them wrap a
-GitLab-specific kernel subcommand (`approve-from-gitlab`, `approve-from-gitlab-mr`,
-`link-intent-from-gitlab-issue`, `link-requirements-from-gitlab-issue`) — those
-4 are mirrored here. The remaining 4 (`gitlab-gate-tracking`,
-`publish-gate-status-gitlab`, `report-gate-reviewers-gitlab`,
-`brief-pending-gates-gitlab`) are read-only/advisory conveniences layered on
-top of gate state `sdlc_status` already exposes, not additional kernel
-subcommands, so they are not mirrored as separate tools.
+The 16 forge-specific tools close a further, narrower gap: `cadre-lifecycle-gitlab`
+and `cadre-lifecycle-github` each bundle 8 forge-specific skills for Claude
+Code / Codex, and every one of them but `brief-pending-gates-{gitlab,github}`
+wraps a distinct forge-specific kernel subcommand — all of those are mirrored
+here, one tool per subcommand:
+
+- **GitLab (8 tools):** `sdlc_approve_from_gitlab`, `sdlc_approve_from_gitlab_mr`
+  (`lifecycle-review-gitlab`); `sdlc_link_intent_from_gitlab_issue`,
+  `sdlc_link_requirements_from_gitlab_issue` (`link-source-issue-gitlab`);
+  `sdlc_list_gate_issues_gitlab`, `sdlc_create_gate_issues_gitlab`
+  (`gitlab-gate-tracking`); `sdlc_request_gate_reviewers_gitlab`
+  (`report-gate-reviewers-gitlab`).
+- **GitHub (8 tools):** `sdlc_approve_from_github`, `sdlc_approve_from_github_pr`
+  (`lifecycle-review-github`); `sdlc_list_github_gate_issues`,
+  `sdlc_create_github_gate_issues` (`create-github-gate-issues`);
+  `sdlc_request_gate_reviewers_github` (`report-gate-reviewers-github`);
+  `sdlc_list_reviewer_nudge`, `sdlc_publish_reviewer_nudge`
+  (`publish-reviewer-nudge-github`, GitHub-only — no GitLab equivalent skill
+  exists).
+- **Shared across both forges (2 tools):** `sdlc_list_gate_status`,
+  `sdlc_publish_gate_status` (`publish-gate-status-gitlab`/`-github` — one
+  pair of tools, `forge: "gitlab" | "github"` selects the shape).
+
+`brief-pending-gates-gitlab`/`-github` are the only two forge-specific skills
+NOT mirrored: both just wrap `bin/cadre sdlc status`, i.e. exactly what
+`sdlc_status` above already calls — there is nothing new to wrap.
+
+**Kernel-version history:** `create-gate-issues`, `list-gate-issues`,
+`create-github-gate-issues`, `list-github-gate-issues`, `publish-gate-status`,
+`list-gate-status`, `request-gate-reviewers-gitlab`, `request-gate-reviewers`,
+`publish-reviewer-nudge`, and `list-reviewer-nudge` (10 of the 16 — every
+GitLab/GitHub tool except the 6 approve/link ones) were documented by the
+packaged skills but **missing** ("invalid choice") from the `agentic-sdlc`
+version installed when these 10 tools were first added here, despite being
+within this repository's then-declared `kernel_compatibility` range. Traced
+upstream: `agentic-sdlc`'s own `VERSION` constant hadn't been bumped across 9
+tagged releases that actually shipped these subcommands — fixed in
+`deagy/agentic-sdlc` v0.13.0 (see that repo's `agentic_sdlc/__init__.py`).
+This repository's `provider.json` now pins `kernel_compatibility.minimum` to
+that fixed release (`[0.13.0, 1.0.0)`), and all 10 tools have been
+live-verified against it. This was never Cline-specific — Claude Code and
+Codex hit the identical error running the same commands their own skills
+document, against the same stale kernel. If you're on an older pinned
+kernel, `agentic-sdlc <subcommand> --help` will tell you.
 
 ## Requires the external `agentic-sdlc` kernel
 
@@ -60,34 +96,91 @@ cline plugin install /path/to/cadre-lifecycle/cline-lifecycle --force
 | `sdlc_approve_from_gitlab_mr` | `bin/cadre sdlc approve-from-gitlab-mr` | Record a human gate approval by fetching and verifying an approved GitLab MR approval live. Fails closed if none is found. |
 | `sdlc_link_intent_from_gitlab_issue` | `bin/cadre sdlc link-intent-from-gitlab-issue` | Record a GitLab issue as the recorded source for a task's G1 (Intent) gate. |
 | `sdlc_link_requirements_from_gitlab_issue` | `bin/cadre sdlc link-requirements-from-gitlab-issue` | Record a GitLab issue as the recorded source for a task's G2 (Requirements Baseline) gate. |
+| `sdlc_approve_from_github` | `bin/cadre sdlc approve-from-github` | Record a human gate approval from prepared GitHub PR-review evidence. |
+| `sdlc_approve_from_github_pr` | `bin/cadre sdlc approve-from-github-pr` | Record a human gate approval by fetching and verifying an approved GitHub PR review live. Fails closed if none is found. |
+| `sdlc_list_gate_issues_gitlab` | `bin/cadre sdlc list-gate-issues` | List a task's existing GitLab gate-tracking issues and their assigned approval sub-issues. Read-only. |
+| `sdlc_create_gate_issues_gitlab` | `bin/cadre sdlc create-gate-issues` | Create/reuse GitLab gate-tracking issues plus assigned approval sub-issues. Defaults to a dry-run preview; `apply: true` requires the `planDigest` the preceding dry-run returned. |
+| `sdlc_list_github_gate_issues` | `bin/cadre sdlc list-github-gate-issues` | List a task's existing GitHub gate-tracking issues and their assigned approval sub-issues. Read-only. |
+| `sdlc_create_github_gate_issues` | `bin/cadre sdlc create-github-gate-issues` | Create/reuse GitHub gate-tracking issues plus assigned approval sub-issues. Defaults to a dry-run preview; `apply: true` requires the `planDigest` the preceding dry-run returned. |
+| `sdlc_list_gate_status` | `bin/cadre sdlc list-gate-status` | Show a task's locally-recorded gate-status publication ledger (both forges). Zero-network, can be stale. Read-only. |
+| `sdlc_publish_gate_status` | `bin/cadre sdlc publish-gate-status` | Publish/update a one-way gate-status summary note on a GitLab MR or GitHub PR (`forge` selects the shape). Never read back as an approval. Defaults to a dry-run preview. |
+| `sdlc_request_gate_reviewers_gitlab` | `bin/cadre sdlc request-gate-reviewers-gitlab` | Report which GitLab usernames would be set as MR reviewers. Read-only/reporting only. |
+| `sdlc_request_gate_reviewers_github` | `bin/cadre sdlc request-gate-reviewers` | Report which GitHub logins would be requested as PR reviewers. Read-only/reporting only. |
+| `sdlc_list_reviewer_nudge` | `bin/cadre sdlc list-reviewer-nudge` | Show a task's locally-recorded reviewer-nudge publication ledger. GitHub-only. Read-only. |
+| `sdlc_publish_reviewer_nudge` | `bin/cadre sdlc publish-reviewer-nudge` | Publish/update an advisory PR comment naming good reviewer candidates. Never a formal review request. GitHub-only. Defaults to a dry-run preview. |
 
 Every tool accepts an optional `root` (defaults to the host session's
 workspace root) and otherwise mirrors the exact flags the corresponding
 `SKILL.md` documents for its runner-neutral CLI invocation — see
 [`index.ts`](index.ts) for the full schemas.
 
-### `sdlc_decide`, `sdlc_approve_from_gitlab`, and `sdlc_approve_from_gitlab_mr` add no approval logic of their own
+### `sdlc_decide` and the four `sdlc_approve_from_*` tools add no approval logic of their own
 
 The `agentic-sdlc` kernel itself structurally refuses a decision from the same
 identity as the gate's preparer/verifier (this repository's human-approval
-invariant — see root `CLAUDE.md`). All three of these tools only relay
-whatever the kernel decides, success or refusal, as JSON; none attempts its
-own separation-of-duties check, and none must ever be called on behalf of a
-human who has not actually made the decision (or, for the two GitLab tools,
-actually recorded/authored the GitLab MR approval) being recorded.
+invariant — see root `CLAUDE.md`). `sdlc_decide`, `sdlc_approve_from_gitlab`,
+`sdlc_approve_from_gitlab_mr`, `sdlc_approve_from_github`, and
+`sdlc_approve_from_github_pr` all only relay whatever the kernel decides,
+success or refusal, as JSON; none attempts its own separation-of-duties
+check, and none must ever be called on behalf of a human who has not
+actually made the decision (or, for the forge-specific tools, actually
+recorded/authored the GitLab MR approval or GitHub PR review) being
+recorded.
 
 ### `sdlc_link_intent_from_gitlab_issue` / `sdlc_link_requirements_from_gitlab_issue` record a source, not an approval
 
 These two only attach a GitLab issue reference to G1/G2 respectively — they
 never advance, approve, or invalidate a gate. Use `sdlc_approve_from_gitlab`
-or `sdlc_approve_from_gitlab_mr` to actually record an approval.
+or `sdlc_approve_from_gitlab_mr` to actually record an approval. GitHub has
+no equivalent kernel subcommand for this today (`link-intent-from-github-issue`/
+`link-requirements-from-github-issue` are documented by
+`link-source-issue-github`'s `SKILL.md` but are not present in every
+`agentic-sdlc` release within this repository's declared
+`kernel_compatibility` range — see the note above), so this plugin has
+nothing to mirror there yet.
+
+### `sdlc_create_gate_issues_gitlab` / `sdlc_create_github_gate_issues` require a plan-digest handshake before assigning anyone
+
+Both default to a dry-run preview (omit `apply`). Assigning a real gate
+approval sub-issue to a real person is consequential and externally visible,
+so the underlying kernel command requires a second call with `apply: true`
+and the exact `planDigest` value the dry-run returned — never fabricate or
+guess one. If the kernel reports the digest is stale, re-run the dry-run and
+get fresh confirmation rather than retrying blindly.
+
+### Four tools treat exit code 2 as a normal report, not a failure
+
+`sdlc_request_gate_reviewers_gitlab`, `sdlc_request_gate_reviewers_github`,
+`sdlc_create_gate_issues_gitlab`, and `sdlc_create_github_gate_issues` all
+wrap kernel commands where exit 0 means "completed cleanly" and exit 2 means
+"completed, but the result contains refusals" (all four) or "...refusals or
+assignee drift" (the two create-gate-issues commands) — both are valid,
+non-failure reports, not something to retry, and all four tools return that
+report's JSON normally either way, including (for the two create-gate-issues
+tools) the `plan_digest` a subsequent `apply: true` call needs and, in
+`--apply` mode, confirmation of any issue that was already created before the
+refusal was hit — except for any `GateIssuesBlocked`/`GateIssuesGithubBlocked`
+failure during `--apply` (also exit 2; not limited to a concurrent
+plan-digest mismatch — ambiguous label matches, identity mismatches, a held
+lock, and several other cases all raise it too), which the kernel reports as
+a bare `{"error": "..."}` rather than the full structured result, so those
+specific cases surface the same way a structural failure would. Only a
+genuine structural failure (exit 1: MR/PR
+not found or closed, an identity mismatch, a malformed request) is expected
+to surface as any of the four tools' `error` field otherwise.
 
 ## Behavioral detail
 
 See [`index.test.mts`](index.test.mts) for the authoritative behavior: tool
-registration, real `bin/cadre sdlc` subprocess outcomes (structured errors for
-an un-onboarded project or a nonexistent task, a real dry-run preview for
-`sdlc_init`), and the missing-root failure mode.
+registration, argument construction (kernel-free), real `bin/cadre sdlc`
+subprocess outcomes (structured errors for an un-onboarded project or a
+nonexistent task, a real dry-run preview for `sdlc_init`), and the
+missing-root failure mode. [`index.exitcode.test.mts`](index.exitcode.test.mts)
+is a separate file specifically for `runCadreSdlcAllowingReportExitCodes`'s
+exit-code-branching behavior — it mocks `node:child_process` at module level
+(to deterministically exercise the exit-2-with-JSON-on-stdout path a live
+kernel call can't reliably reproduce), so it can't share a file with
+`index.test.mts`'s real, unmocked subprocess tests.
 
 ## Development
 
