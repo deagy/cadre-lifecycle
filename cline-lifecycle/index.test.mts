@@ -809,10 +809,21 @@ describe("cadre-lifecycle plugin", () => {
 
     describe("sdlc_plan against a scratch project", () => {
       let scratchDir: string;
+      let initSucceeded = false;
 
       beforeAll(async () => {
         scratchDir = mkdtempSync(path.join(tmpdir(), "cline-lifecycle-sdlc-plan-test-"));
         await execFileAsync("git", ["init", "-q"], { cwd: scratchDir });
+        // sdlc_plan requires .agentic-sdlc/project.json to already exist -- seed it
+        // with a real (non-dry-run) sdlc_init first, exactly like a real caller
+        // would have to. Track whether this succeeded so the assertions below can
+        // tell "kernel unavailable" apart from "plan itself failed unexpectedly".
+        const tools = await registerTools(scratchDir);
+        const initResult = (await findTool(tools, "sdlc_init").execute(
+          { profile: "secure-cloud", projectId: "cline-lifecycle-test-plan-proj", classification: "internal" },
+          {} as never,
+        )) as Record<string, unknown>;
+        initSucceeded = !initResult.error;
       });
 
       afterAll(() => {
@@ -826,10 +837,17 @@ describe("cadre-lifecycle plugin", () => {
           {} as never,
         )) as Record<string, unknown>;
 
-        if (result.error) {
+        if (!initSucceeded) {
+          // The kernel itself wasn't usable for sdlc_init either (e.g. not
+          // installed in this environment) -- sdlc_plan failing the same way
+          // is expected, not a signal about sdlc_plan's own correctness.
           expect(typeof result.error).toBe("string");
           return;
         }
+        // Seeding succeeded, so a real plan call must actually succeed and
+        // return real fields -- an error here would be a genuine sdlc_plan
+        // defect, not an environment gap.
+        expect(result.error).toBeUndefined();
         expect(result.task_id).toBe("cline-lifecycle-test-plan-task");
         expect(typeof result.status).toBe("string");
       });
