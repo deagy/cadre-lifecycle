@@ -25,10 +25,14 @@
   },
   "devDependencies": {
     "typescript": "5.9.3",
-    "vitest": "3.2.7"
+    "vitest": "3.2.7",
+    "eslint": "^8.56.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint ."
   }
 }

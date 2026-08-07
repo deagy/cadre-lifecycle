@@ -48,6 +48,8 @@ jobs:
         working-directory: cline
       - run: npm run typecheck
         working-directory: cline
+      - run: npm run lint
+        working-directory: cline
 
   cline-agents-plugin:
     name: cline-agents/ (npm test, typecheck)
@@ -95,6 +97,10 @@ jobs:
         if: steps.probe.outputs.present == 'true'
         working-directory: cline-agents
         run: npm run typecheck
+      - name: npm run lint
+        if: steps.probe.outputs.present == 'true'
+        working-directory: cline-agents
+        run: npm run lint
 
   cline-lifecycle-plugin:
     name: cline-lifecycle/ (npm test, typecheck)
@@ -160,6 +166,7 @@ jobs:
       - run: npm test
         working-directory: cline-lifecycle
       - run: npm run typecheck
+      - run: npm run lint
         working-directory: cline-lifecycle
 
   python-tools:
