@@ -15,7 +15,13 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
-## [Unreleased]
+## [0.10.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.10.0) - 2026-08-07
+
+### Added
+
+- **Bumped `cadre-ref.txt` to [`deagy/cadre@v0.15.0`](https://github.com/deagy/cadre/releases/tag/v0.15.0) and reapplied regeneration**, which adds new packaged CLI surface: `cadre config` (`show`/`path`/`resolve`) for inspecting where each operator setting resolved from, a leading `cadre --interactive <subcommand>` flag, config-file support for settings that were previously environment-variable-only (`.agents/cadre.yaml` project-local and `~/.config/cadre/config.yaml` user-global, with environment variables still winning), `cadre gitlab-evidence` as a non-MCP CLI over the GitLab evidence tools, and opt-in asynchronous MCP dispatch (`wait=False`) with new `poll_dispatch_status`/`poll_team_status` tools. Existing environment-variable-only setups are unaffected. See [cadre's own 0.15.0 entry](https://github.com/deagy/cadre/blob/main/CHANGELOG.md) for the full detail, including why secrets are never read from a config file and why a project-local config file is treated as untrusted content — this changelog does not restate register-side changes.
+
+  The packaged `bin/cadre` wrapper gained the corresponding `--interactive` handling and now resolves `agentic_sdlc.bin_path` through the same precedence chain as the register's own dispatcher, rather than an environment-variable-and-`PATH`-only lookup that ignored a configured value. It still requires no Python interpreter for `cadre sdlc` when the binary is already locatable via `AGENTIC_SDLC_BIN` or `PATH`.
 
 ### Fixed
 
