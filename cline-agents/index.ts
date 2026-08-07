@@ -150,11 +150,29 @@ async function runCadreSelect(
 // repository-relative, so there is no workspace root to resolve against.
 const GITLAB_EVIDENCE_TIMEOUT_MS = 60_000;
 
+// `gitlab_core.py`'s own docstring asserts a non-JSON/nonzero-exit outcome
+// only ever means this CLI's own argument parsing failed or an unexpected
+// exception escaped gitlab_core -- but that "unexpected exception" case is
+// reachable in practice (e.g. GITLAB_BASE_URL pointed at a misconfigured
+// proxy/gateway that returns a 200 with an HTML error page instead of
+// JSON), not just theoretical. Catch it here the same way
+// retrieveKnowledgeContext above does: prefer stderr over a caught error's
+// .message, since execFileAsync's rejection message embeds the full
+// command line -- which embeds this call's own --content/--description
+// argv, values every caller of this function marks "untrusted task data"
+// in its own Zod schema. Callers get the same gitlab_core status
+// vocabulary ("unavailable") on this path as on every other failure mode
+// gitlab_core itself already reports structurally.
 async function runGitlabEvidenceCli(args: string[]): Promise<Record<string, unknown>> {
-  const { stdout } = await execFileAsync(CADRE_BIN, ["gitlab-evidence", ...args], {
-    timeout: GITLAB_EVIDENCE_TIMEOUT_MS,
-  });
-  return JSON.parse(stdout) as Record<string, unknown>;
+  try {
+    const { stdout } = await execFileAsync(CADRE_BIN, ["gitlab-evidence", ...args], {
+      timeout: GITLAB_EVIDENCE_TIMEOUT_MS,
+    });
+    return JSON.parse(stdout) as Record<string, unknown>;
+  } catch (caught) {
+    const err = caught as { stderr?: string };
+    return { status: "unavailable", reason: err.stderr?.trim() || "gitlab-evidence CLI failed" };
+  }
 }
 
 // Mirrors bin/cadre's own interpreter probe (python3, then python; each
@@ -1026,6 +1044,7 @@ export {
   countFlaggedPassages,
   shouldRetrieveKnowledge,
   sanitizeToolResult,
+  runGitlabEvidenceCli,
   HANDOFFS_DIR,
   type AgentDefinition,
   type KnowledgeContextRequest,

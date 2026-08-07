@@ -20,6 +20,7 @@ import {
   resolvePythonInterpreter,
   resolveToolPolicyConfig,
   retrieveKnowledgeContext,
+  runGitlabEvidenceCli,
   sanitizeToolResult,
   shouldRetrieveKnowledge,
   type SetupApi,
@@ -1104,5 +1105,20 @@ describe("GitLab evidence tools (create_review_subtask/write_wiki_page/write_evi
     const tool = findTool(tools, "write_wiki_page");
     expect(tool.description).toMatch(/confirmation_required/);
     expect(tool.description).toMatch(/never fabricate/);
+  });
+
+  it("runGitlabEvidenceCli returns a structured unavailable result, not a rejection, when the underlying CLI exits nonzero with no JSON on stdout", async () => {
+    // Regression test: `cadre gitlab-evidence` exiting nonzero with empty/
+    // non-JSON stdout is a real, reachable failure mode (gitlab_cli.py's own
+    // docstring: "argument parsing failed or an unexpected exception
+    // escaped gitlab_core"), not just theoretical -- a bogus subcommand
+    // reproduces the argparse-failure half of that deterministically, with
+    // no network/env-var setup required. Before this fix, this rejected
+    // with a raw execFileAsync error embedding the full argv (including any
+    // caller-supplied title/description content); now it must resolve to
+    // gitlab_core's own "unavailable" vocabulary instead.
+    const result = await runGitlabEvidenceCli(["this-subcommand-does-not-exist"]);
+    expect(result.status).toBe("unavailable");
+    expect(typeof result.reason).toBe("string");
   });
 });
