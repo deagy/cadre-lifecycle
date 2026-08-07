@@ -12,3 +12,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Regeneration guard caveat
 
 AGENTS.md and README.md's "Regenerating Assets" cover the safe procedure (regenerate into a scratch directory, diff, apply everything except the hand-authored exceptions). One additional caveat: this is currently a documentation-only safeguard. The register's `generate_global_plugin.py` guard against overwriting an existing `--output` target only checks for the *presence* of a `.codex-plugin/plugin.json`, and this repo has one (it is itself a packaged plugin) — so the guard does not actually stop `README.md` from being clobbered if `cadre generate-plugin --output` is run directly against this repository anyway. Tracked upstream at [deagy/cadre#97](https://github.com/deagy/cadre/issues/97), tracked here at [deagy/cadre-lifecycle#3](https://github.com/deagy/cadre-lifecycle/issues/3). Once a structural guard lands upstream, revisit whether this note is still needed.
+
+## Related repositories
+
+- [**cadre**](https://github.com/deagy/cadre) — The Agent Suite. Canonical source for 71 role definitions, `roster/catalog.yaml`, orchestration routing, and the `provider/` bundle. See its [CLAUDE.md](https://github.com/deagy/cadre/blob/main/CLAUDE.md) for role catalog architecture.
+- [**agentic-sdlc**](https://github.com/deagy/agentic-sdlc) — The Agentic SDLC lifecycle kernel + LangGraph engine. Owns G1-G10 gate schemas and the provider/profile ecosystem that this repository consumes. See its [CLAUDE.md](https://github.com/deagy/agentic-sdlc/blob/main/CLAUDE.md) for engine architecture.
+
+This repository is the packaged plugin distribution that bridges cadre (role catalog) and agentic-sdlc (lifecycle kernel) into installable Claude Code / Codex plugins.

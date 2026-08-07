@@ -1,0 +1,47 @@
+# Pre-commit hooks for deagy/cadre-lifecycle
+#
+# TypeScript linting, agent count parity, and generated-content drift checks.
+# See: https://pre-commit.com/
+
+repos:
+  # TypeScript / Node.js checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-json
+        files: "\\.json$"
+        exclude: "^node_modules/|^package-lock\\.json$|^agent-catalog\\.json$"
+
+  # Agent count parity: agents/ ↔ cline-agents/agents/ should have same files
+  - repo: local
+    hooks:
+      - id: agent-parity-check
+        name: Verify agent count parity between agents/ and cline-agents/agents/
+        entry: >
+          bash -c '
+            cadre_agents=$(ls agents/*.md 2>/dev/null | wc -l);
+            cline_agents=$(ls cline-agents/agents/*.md 2>/dev/null | wc -l);
+            if [ "$cadre_agents" != "$cline_agents" ]; then
+              echo "Agent count mismatch: agents/ ($cadre_agents) vs cline-agents/agents/ ($cline_agents)";
+              exit 1;
+            fi
+          '
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: codex-agent-parity-check
+        name: Verify codex agent count parity
+        entry: >
+          bash -c '
+            cadre_agents=$(ls codex-agents/*.toml 2>/dev/null | wc -l);
+            provider_agents=$(ls provider/codex-agents/*.toml 2>/dev/null | wc -l);
+            if [ "$cadre_agents" != "$provider_agents" ]; then
+              echo "Codex agent count mismatch: codex-agents/ ($cadre_agents) vs provider/codex-agents/ ($provider_agents)";
+              exit 1;
+            fi
+          '
+        language: system
+        pass_filenames: false
+        always_run: true
