@@ -23,7 +23,7 @@ This directory contains the CLI entry point for the Cadre Lifecycle plugin distr
 ./bin/cadre sdlc --help               # Lifecycle subcommand help
 ./bin/cadre sdlc init                  # Initialize a project overlay
 ./bin/cadre sdlc plan --task "..."     # Create a dispatch plan with gate tracking
-./bin/cadre sdlc status <task-id>      # Check pending gates for a task
+./bin/cadre sdlc status --task-id <task-id>      # Check pending gates for a task
 ./bin/cadre sdlc validate              # Validate project configuration
 ./bin/cadre select --task "..."        # Role selection from the Cadre catalog
 ```

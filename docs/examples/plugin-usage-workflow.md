@@ -9,11 +9,15 @@ A team wants to adopt Cadre role selection and Agentic SDLC lifecycle governance
 ## Step 1: Install Plugins
 
 ```sh
-# Install only what you need (plugins are independent)
-npm install -D @deagy/cadre-lifecycle-core
-npm install -D @deagy/cadre-lifecycle-github   # if using GitHub
-# or
-npm install -D @deagy/cadre-lifecycle-gitlab   # if using GitLab
+# Install via plugin marketplace (plugins are installed per-IDE, not via npm)
+# Claude Code:
+/plugin install cadre-lifecycle-core@cadre-lifecycle-team
+
+# Codex:
+codex plugin add cadre-lifecycle-core@cadre-lifecycle-team
+
+# Cline:
+cline plugin install --git https://github.com/deagy/cadre-lifecycle/cline-lifecycle --force
 ```
 
 ## Step 2: Bootstrap the Project
