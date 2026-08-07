@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '%b\\n' '[cadre-lifecycle] This marketplace has moved and is no longer maintained.\\n\\n  Cadre, the Agentic SDLC kernel, and this plugin distribution are now one\\n  repository: https://github.com/deagy/cadre\\n\\n  Your installed plugins keep working, but this marketplace is frozen -- it\\n  will receive no further releases. To move:\\n\\n      /plugin marketplace add deagy/cadre\\n      /plugin install cadre@cadre-team\\n      /plugin marketplace remove cadre-lifecycle-team\\n\\n  Installed a lifecycle plugin (cadre-lifecycle-core / -github / -gitlab)?\\n  Reinstall it from the new marketplace under the same name.'",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -15,6 +15,42 @@ release convention (see `README.md`'s "Releasing" section) ties git tags
 `python3 tools/plugin_version.py --check`/`--set`. Each version heading
 below links to its [GitHub Release](https://github.com/deagy/cadre-lifecycle/releases).
 
+## [0.11.0](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.11.0) - 2026-08-07
+
+**Final release. This repository is being archived.**
+
+Cadre, the Agentic SDLC kernel, and this plugin distribution are now a single
+repository: [`deagy/cadre`](https://github.com/deagy/cadre). Four repositories
+(`deagy/cadre`, `deagy/agentic-sdlc`, `deagy/cadre-lifecycle`,
+`deagy/cadre-profile-secure-cloud`) became one, which removes the cross-repo
+regeneration machinery that kept ~340 generated files in sync here.
+
+### Added
+
+- A `SessionStart` hook in all four plugins printing a one-time-per-session
+  migration notice. An archived repository stays cloneable, so nothing
+  breaks on upgrade — but this marketplace stops receiving releases, and
+  every existing install would otherwise freeze here permanently with no
+  signal. A hook is the only mechanism that reaches an *already installed*
+  plugin: a README reaches only people who go looking, and marketplace
+  `renames` migrates names within one marketplace, never across two.
+- `tools/migration_notice.py` (canonical notice text) and
+  `tools/test_migration_notice.py`, which asserts all four inlined copies
+  match it, that every manifest declares the hook, that the command renders
+  to the exact text through a real shell, and that it only ever prints —
+  no install, no config write, no network.
+
+### Migration
+
+```text
+/plugin marketplace add deagy/cadre
+/plugin install cadre@cadre-team
+/plugin marketplace remove cadre-lifecycle-team
+```
+
+Lifecycle plugins (`cadre-lifecycle-core` / `-github` / `-gitlab`) keep their
+names in the new marketplace; reinstall whichever you had.
+
 ## [0.10.1](https://github.com/deagy/cadre-lifecycle/releases/tag/v0.10.1) - 2026-08-07
 
 ### Fixed
