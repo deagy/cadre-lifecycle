@@ -121,13 +121,11 @@ cline doctor fix
 
 ### Claude Code
 
-Add this repository as a marketplace once (pin to a release tag — check [the
-releases page](https://github.com/deagy/cadre-lifecycle/releases) for the
-current tag rather than trusting the one written here), then install
-whichever plugins you want:
+Add this repository as a marketplace once, then install `cadre`. Most projects
+need nothing else — the lifecycle plugins below are optional.
 
 ```text
-/plugin marketplace add deagy/cadre-lifecycle@v0.9.8
+/plugin marketplace add deagy/cadre-lifecycle
 /plugin install cadre@cadre-lifecycle-team
 
 # Optional — only if you want forge-agnostic-only G1–G10 lifecycle governance:
@@ -139,17 +137,24 @@ whichever plugins you want:
 /plugin install cadre-lifecycle-gitlab@cadre-lifecycle-team
 ```
 
+Deliberately unpinned. `/plugin install` resolves the version from each
+plugin's own `.claude-plugin/plugin.json`, and `release.yml` only tags `main`
+from a state where all 8 manifests agree — so the marketplace ref does not
+need a tag, and pinning one here only guarantees a stale document. Use
+`/plugin update` to move forward. If your policy requires a pinned source,
+append `@<tag>` from [the
+releases](https://github.com/deagy/cadre-lifecycle/releases) and own keeping
+it current: a stale pin is how you end up with a plugin whose
+kernel-compatibility window no longer matches your installed kernel.
+
 **Migrating from `cadre-lifecycle@cadre-lifecycle-team`** (the pre-0.3.0 combined plugin): uninstall it and install `cadre@cadre-lifecycle-team` instead — the rename is a new install key, not an automatic migration.
 
 ### Codex CLI
 
-Clone at the tag first (check [the releases
-page](https://github.com/deagy/cadre-lifecycle/releases) for the current tag
-rather than trusting the one written here), add the marketplace once, then
-install whichever plugins you want:
+Clone first, add the marketplace once, then install whichever plugins you want:
 
 ```sh
-git clone --branch v0.9.8 https://github.com/deagy/cadre-lifecycle.git
+git clone https://github.com/deagy/cadre-lifecycle.git
 codex plugin marketplace add /path/to/cadre-lifecycle
 codex plugin add cadre@cadre-lifecycle-team
 
@@ -291,8 +296,8 @@ This project combines two independent upstream systems (see the diagram above fo
 |---|---|---|
 | **`cadre`** | Role definitions/catalog/routing, and the `agents_select` Cline tool call (never talks to the lifecycle kernel). | — |
 | **`cadre-lifecycle-core`** | Forge-agnostic lifecycle governance UX: conversational wrappers around `bin/cadre sdlc` (a thin pass-through to the external kernel), plus a local-only pending-gates briefing and the kernel bootstrap script. | `lifecycle-onboarding`, `lifecycle-review`, `brief-pending-gates` |
-| **`cadre-lifecycle-github`** | GitHub-flavored gate governance: PR-review-sourced decisions, G1/G2 source-issue linking, gate-status PR comments, read-only PR-reviewer reporting, gate/approval tracking issues, and an advisory (never a formal request) reviewer nudge. Self-sufficient — bundles its own onboarding/review/pending-gates skills and kernel bootstrap. Requires `agentic-sdlc` [v0.12.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.12.0)+. | `lifecycle-onboarding-github`, `lifecycle-review-github`, `lifecycle-review-generic-github`, `brief-pending-gates-github`, `link-source-issue-github`, `publish-gate-status-github`, `report-gate-reviewers-github`, `create-github-gate-issues`, `publish-reviewer-nudge-github` |
-| **`cadre-lifecycle-gitlab`** | GitLab-flavored gate governance: MR-approval-sourced decisions, G1/G2 source-issue linking, gate-status MR notes, read-only MR-reviewer reporting, and gate/approval tracking issues. Self-sufficient — bundles its own onboarding/review/pending-gates skills and kernel bootstrap. Requires `agentic-sdlc` [v0.12.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.12.0)+. | `lifecycle-onboarding-gitlab`, `lifecycle-review-gitlab`, `lifecycle-review-generic-gitlab`, `brief-pending-gates-gitlab`, `link-source-issue-gitlab`, `publish-gate-status-gitlab`, `report-gate-reviewers-gitlab`, `gitlab-gate-tracking` |
+| **`cadre-lifecycle-github`** | GitHub-flavored gate governance: PR-review-sourced decisions, G1/G2 source-issue linking, gate-status PR comments, read-only PR-reviewer reporting, gate/approval tracking issues, and an advisory (never a formal request) reviewer nudge. Self-sufficient — bundles its own onboarding/review/pending-gates skills and kernel bootstrap. Requires `agentic-sdlc` [v0.13.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.13.0)+. | `lifecycle-onboarding-github`, `lifecycle-review-github`, `lifecycle-review-generic-github`, `brief-pending-gates-github`, `link-source-issue-github`, `publish-gate-status-github`, `report-gate-reviewers-github`, `create-github-gate-issues`, `publish-reviewer-nudge-github` |
+| **`cadre-lifecycle-gitlab`** | GitLab-flavored gate governance: MR-approval-sourced decisions, G1/G2 source-issue linking, gate-status MR notes, read-only MR-reviewer reporting, and gate/approval tracking issues. Self-sufficient — bundles its own onboarding/review/pending-gates skills and kernel bootstrap. Requires `agentic-sdlc` [v0.13.0](https://github.com/deagy/agentic-sdlc/releases/tag/v0.13.0)+. | `lifecycle-onboarding-gitlab`, `lifecycle-review-gitlab`, `lifecycle-review-generic-gitlab`, `brief-pending-gates-gitlab`, `link-source-issue-gitlab`, `publish-gate-status-gitlab`, `report-gate-reviewers-gitlab`, `gitlab-gate-tracking` |
 
 The Cadre register remains the source of truth for role definitions, and (as of this split) also generates `cadre-lifecycle-core`'s three skills into `plugins/lifecycle/skills/` — see `cadre-ref.txt`. `cadre-lifecycle-github`/`cadre-lifecycle-gitlab` are entirely hand-authored here; the register has no concept of them, including their bundled onboarding/review/pending-gates skill copies, which are hand-maintained duplicates of `cadre-lifecycle-core`'s register-generated skills kept in sync via `tools/test_plugin_duplication_health.py`. Assets in this repository are generated from the register — see "Regenerating Assets" below for the safe procedure; `cadre generate-plugin --output` cannot be run directly against this repository.
 
